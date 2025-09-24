@@ -15,7 +15,7 @@ export function Hero() {
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none">
               Hi, I'm{" "}
-              <span className="text-primary">Your Name</span>
+              <span className="text-primary">Romiafan</span>
             </h1>
             <p className="mx-auto max-w-[700px] text-gray-500 md:text-xl dark:text-gray-400">
               Full-Stack Engineer & Creative Technologist

@@ -10,13 +10,13 @@ export function Navbar() {
           href="/" 
           className="flex items-center space-x-2 text-xl font-bold"
         >
-          <span>Your Name</span>
+          <span>Romiafan</span>
         </Link>
 
         {/* Social Links */}
         <nav className="flex items-center space-x-4">
           <Link
-            href="https://github.com/yourusername"
+            href="https://github.com/romiafan"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 text-sm font-medium transition-colors hover:text-primary"
@@ -25,7 +25,7 @@ export function Navbar() {
             <span className="hidden sm:inline">GitHub</span>
           </Link>
           <Link
-            href="https://linkedin.com/in/yourusername"
+            href="https://www.linkedin.com/in/romi-afan"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 text-sm font-medium transition-colors hover:text-primary"
