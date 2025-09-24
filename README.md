@@ -1,36 +1,169 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Personal Website & Toolkit
 
-## Getting Started
+A modern personal website and toolkit built with a strict TypeScript-first architecture. This serves as a digital resume, portfolio showcase, and collection of useful web utilities for a software engineer.
 
-First, run the development server:
+## 🚀 Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**Core Technologies (Mandatory - DO NOT substitute):**
+
+- **Framework:** Next.js 15+ with App Router
+- **Language:** TypeScript (strict mode)
+- **Package Manager:** pnpm (exclusively)
+- **Bundler:** Turbopack
+- **Backend:** Convex for database/serverless functions
+- **Authentication:** Clerk (integrated with Convex)
+- **Styling:** Tailwind CSS v4
+- **UI Components:** shadcn/ui (new-york style, slate color)
+- **Icons:** lucide-react
+- **Animations:** Framer Motion
+- **Fonts:** Geist and Geist Mono
+- **Deployment:** Vercel
+
+## 🏗️ Project Structure
+
+```text
+src/
+├── app/                  # Next.js App Router pages
+│   ├── toolkit/         # Protected utility tools (future)
+│   ├── layout.tsx       # Root layout with providers
+│   └── page.tsx         # Home page
+├── components/
+│   ├── layout/          # Navbar, Footer
+│   ├── ui/              # shadcn/ui components
+│   ├── views/           # Page sections (Hero, About, Projects)
+│   └── providers/       # Theme, Convex providers
+├── lib/
+│   ├── utils.ts         # cn() utility for class merging
+│   └── convex.ts        # Convex client setup (future)
+convex/                  # Convex backend functions
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Prerequisites:**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Node.js 18+
+- pnpm (install with `npm install -g pnpm`)
 
-## Learn More
+**Commands (use pnpm exclusively):**
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Development with Turbopack
+pnpm dev --turbo
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Production build with Turbopack
+pnpm build --turbo
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Start production server
+pnpm start
 
-## Deploy on Vercel
+# Linting
+pnpm lint
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Add shadcn/ui components
+pnpm dlx shadcn add [component]
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Initialize Convex (when ready)
+pnpm dlx convex init
+```
+
+## 🎯 Key Features
+
+### Current Implementation
+
+- ✅ Modern responsive design with Tailwind CSS
+- ✅ Dark/light mode support
+- ✅ Hero section with smooth scrolling
+- ✅ Projects showcase section
+- ✅ TypeScript strict mode
+- ✅ Server/Client component architecture
+
+### Planned Features
+
+- 🔄 Convex backend integration
+- 🔄 Clerk authentication
+- 🔄 Contact form with database storage
+- 🔄 Protected `/toolkit` route with utilities:
+  - JSON Formatter
+  - Color Picker & Converter
+  - Lorem Ipsum Generator
+- 🔄 Project portfolio with real data
+- 🔄 Blog functionality (optional)
+
+## 📝 Development Guidelines
+
+### Architecture Patterns
+
+- **Server Components** by default (for static content, data fetching)
+- **Client Components** only when needed (`"use client"` for interactivity)
+- Use `cn()` utility from `@/lib/utils` for conditional classes
+- Import aliases: `@/components`, `@/lib`, `@/ui`
+
+### Component Organization
+
+- Page sections → `src/components/views/`
+- Reusable UI → `src/components/ui/` (shadcn/ui managed)
+- Layout components → `src/components/layout/`
+- Providers → `src/components/providers/`
+
+### Styling Approach
+
+- Tailwind CSS v4 with CSS variables
+- Component variants via class-variance-authority
+- Responsive design with mobile-first approach
+- Semantic HTML with accessibility in mind
+
+### Data Patterns (Future)
+
+- Convex `useQuery` for data fetching
+- Convex `useMutation` for form submissions
+- Real-time updates via Convex subscriptions
+
+## 🚀 Deployment
+
+1. **Environment Setup:**
+
+   ```bash
+   cp .env.example .env.local
+   # Add your Convex and Clerk environment variables
+   ```
+
+2. **Vercel Deployment:**
+   - Push to GitHub repository
+   - Connect to Vercel
+   - Add environment variables in Vercel dashboard
+   - Auto-deploy on push to main branch
+
+## 📚 Documentation
+
+- [`website-plan.md`](./website-plan.md) - Detailed project specifications
+- [`.github/copilot-instructions.md`](./.github/copilot-instructions.md) - AI development guidelines
+- [`.github/instructions/`](./.github/instructions/) - Development standards
+
+## 🔧 Environment Variables
+
+```bash
+# Convex
+NEXT_PUBLIC_CONVEX_URL=your-convex-deployment-url
+CONVEX_DEPLOYMENT=your-deployment-name
+
+# Clerk (future)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your-clerk-key
+CLERK_SECRET_KEY=your-clerk-secret
+```
+
+## 🎨 Design System
+
+- **Colors:** Slate color scheme with CSS variables
+- **Typography:** Geist font family (sans & mono)
+- **Components:** shadcn/ui with "new-york" style
+- **Icons:** lucide-react icon library
+- **Animations:** Subtle Framer Motion transitions
+
+## 📄 License
+
+This project is personal and proprietary.
+
+---
+
+Built with ❤️ using Next.js, TypeScript, and modern web technologies.
