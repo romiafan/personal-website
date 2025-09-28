@@ -279,6 +279,66 @@ export function JsonTools() {
     }
   }
 
+  // XLSX export (Issue #23) - dynamic import sheetjs
+  async function exportWorkbookXlsx() {
+    if (!workbookSheets) return;
+    try {
+      // gather normalized sheet data first
+      const normalized = workbookSheets.map(s => {
+        if (!Array.isArray(s.data) || !s.data.every(r => r && typeof r === 'object' && !Array.isArray(r))) return { ...s, rows: [] as Record<string, unknown>[] };
+        return { ...s, rows: s.data as Record<string, unknown>[] };
+      });
+      const valid = normalized.filter(s => s.rows.length);
+      if (!valid.length) {
+        push({ title: 'Export Failed', description: 'No valid sheet rows for XLSX', variant: 'error' });
+        return;
+      }
+      // compute cell count for guard
+      let cellCount = 0;
+      for (const sheet of valid) {
+        const keySet = new Set<string>();
+        sheet.rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
+        cellCount += sheet.rows.length * keySet.size;
+      }
+      const LARGE_CELL_THRESHOLD = 200_000;
+      if (cellCount > LARGE_CELL_THRESHOLD) {
+        const proceed = confirm(`This workbook is large (≈${cellCount.toLocaleString()} cells). Export may be slow. Continue?`);
+        if (!proceed) return;
+      }
+      const XLSXMod = await import('xlsx');
+      const XLSX = XLSXMod; // sheetjs export namespace
+      const wb = XLSX.utils.book_new();
+      for (const sheet of valid) {
+        const keyOrder: string[] = [];
+        const seen = new Set<string>();
+        sheet.rows.forEach(r => {
+          Object.keys(r).forEach(k => { if (!seen.has(k)) { seen.add(k); keyOrder.push(k); } });
+        });
+        const dataMatrix = [keyOrder, ...sheet.rows.map(r => keyOrder.map(k => {
+          const v = (r as Record<string, unknown>)[k];
+          if (v === null || v === undefined) return '';
+          if (typeof v === 'object') return JSON.stringify(v);
+          return v as unknown;
+        }))];
+        const ws = XLSX.utils.aoa_to_sheet(dataMatrix);
+        const safe = sheet.name.replace(/[^A-Za-z0-9-_]+/g, '_').slice(0, 31) || 'Sheet';
+        XLSX.utils.book_append_sheet(wb, ws, safe);
+      }
+      const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `workbook_export_${Date.now()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      push({ title: 'XLSX Exported', description: `Workbook exported (${valid.length} sheet${valid.length!==1?'s':''})`, variant: 'success' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'XLSX export failed';
+      push({ title: 'Export Failed', description: msg, variant: 'error' });
+    }
+  }
+
   function minifyJson() {
     try {
       const parsed = result?.parsed ?? JSON.parse(input);
@@ -624,7 +684,10 @@ export function JsonTools() {
           <button onClick={copyFormatted} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Copy</button>
           <button onClick={exportCsv} className="rounded-md border px-3 py-1.5 text-sm font-medium">JSON → CSV</button>
           {workbookSheets && (
-            <button onClick={exportWorkbookZip} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</button>
+            <>
+              <button onClick={exportWorkbookZip} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</button>
+              <button onClick={exportWorkbookXlsx} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Export workbook as XLSX (SheetJS)">Export XLSX</button>
+            </>
           )}
           <button onClick={minifyJson} disabled={!result?.parsed} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Minify</button>
           <button onClick={downloadJson} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Download</button>

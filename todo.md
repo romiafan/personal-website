@@ -69,6 +69,10 @@
   - Added: Tree view with expand/collapse, key sorting, search (plain + regex) with match navigation, depth collapse selector, performance mode (node cap warning), JSON→CSV export, path/value copy, JSON Pointer copy, inline primitive editing (double-click), undo/redo (50-state history), minify, download.
   - Acceptance: All functions operate without runtime errors; undo/redo reflects edits/format/minify; pointer and path copies valid.
 
+- [x] Toolkit: JSON Tools Multi-Sheet Workbook Export (CSV ZIP & XLSX) (#22, #23)
+  - Detects workbook patterns (`sheets[]`, `workbook[]`, or object-of-arrays) and enables: per-sheet CSV inside ZIP (dynamic `jszip`) and native XLSX export (dynamic `xlsx`) with union-of-keys column ordering, safe sheet naming (<=31 chars), large workbook guard (>200k cells confirm dialog).
+  - Acceptance: Workbook detection triggers two export buttons; invalid sheet shapes skipped with remaining sheets exported; large data prompt appears when threshold exceeded.
+
 - [x] Toolkit: Color Utility (MVP)
   - Input for HEX; auto-convert to RGB & HSL; basic color preview square.
   - Acceptance: Entering #RRGGBB updates conversions accurately (edge: shorthand #fff expands).
@@ -118,7 +122,6 @@
 - [ ] JSON Tools: Find & replace (regex + preview) with batch edit confirmation
 - [ ] JSON Tools: Export selected subtree as new JSON file
 - [ ] JSON Tools: Collapsed state serialization (shareable URL param)
-- [ ] JSON Tools: Multi-sheet XLSX export (follow-up to Issue #22; current CSV ZIP implemented)
 - [ ] Add Blog (MDX) Skeleton
 - [ ] Rate Limit Contact Form (basic in-memory or Convex rate doc)
 - [ ] Email / Notification on New Message (Convex action or 3rd-party)
