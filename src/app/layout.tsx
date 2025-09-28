@@ -58,6 +58,23 @@ export default function RootLayout({
             __html: `(() => { try { const ls = localStorage.getItem('theme'); const mql = window.matchMedia('(prefers-color-scheme: dark)'); const system = mql.matches ? 'dark' : 'light'; const theme = ls === 'light' || ls === 'dark' ? ls : system; if (theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); } catch(_) {} })();`
           }}
         />
+        {/* Site-wide Person JSON-LD (update with real data) */}
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Person',
+              name: 'Your Name',
+              url: 'https://example.com',
+              jobTitle: 'Full-Stack Engineer',
+              sameAs: [
+                'https://github.com/romiafan'
+              ]
+            })
+          }}
+        />
         <ClerkProvider>
           <ThemeProvider
             attribute="class"

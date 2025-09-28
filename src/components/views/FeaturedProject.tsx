@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn } from '@/lib/utils';
+import { cn, relativeTime, languageColor } from '@/lib/utils';
 import { Star, GitFork, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { fadeInUp } from '@/lib/motion';
@@ -16,25 +16,6 @@ interface FeaturedProjectProps {
   updated_at: string;
 }
 
-function relativeTime(fromISO: string): string {
-  try {
-    const then = new Date(fromISO).getTime();
-    const now = Date.now();
-    const diff = Math.max(0, now - then);
-    const sec = Math.floor(diff / 1000);
-    if (sec < 60) return 'just now';
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr}h ago`;
-    const day = Math.floor(hr / 24);
-    if (day < 30) return `${day}d ago`;
-    const mo = Math.floor(day / 30);
-    if (mo < 12) return `${mo}mo ago`;
-    const yr = Math.floor(day / 365);
-    return `${yr}y ago`;
-  } catch { return ''; }
-}
 
 export const FeaturedProject: React.FC<FeaturedProjectProps> = ({
   name, description, html_url, homepage, stars, forks, topics, language, updated_at
@@ -55,7 +36,17 @@ export const FeaturedProject: React.FC<FeaturedProjectProps> = ({
         <div className="flex-1 space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium backdrop-blur">
             <span className="text-primary font-semibold">Featured</span>
-            {language && <span className="text-muted-foreground">{language}</span>}
+            {language && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                {languageColor(language) && (
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: languageColor(language) || undefined }}
+                  />
+                )}
+                {language}
+              </span>
+            )}
           </div>
           <h3 className="text-2xl font-bold tracking-tight leading-tight">{name}</h3>
           {description && <p className="max-w-prose text-sm text-muted-foreground leading-relaxed">{description}</p>}

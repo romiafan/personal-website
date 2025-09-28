@@ -202,6 +202,7 @@ export function Projects() {
                     topics={project.topics}
                     stars={project.stargazers_count}
                     forks={project.forks_count}
+                    updated_at={project.updated_at}
                   />
                 ))}
               </div>

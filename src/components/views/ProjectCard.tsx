@@ -2,6 +2,8 @@
 
 import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
+import { Star, GitFork } from 'lucide-react';
+import { relativeTime, languageColor, cn } from '@/lib/utils';
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export interface ProjectCardProps {
@@ -12,6 +14,7 @@ export interface ProjectCardProps {
   topics: string[];
   stars: number;
   forks: number;
+  updated_at?: string;
   className?: string;
 }
 
@@ -24,26 +27,37 @@ export function ProjectCard({
   stars,
   forks,
   className,
+  updated_at
 }: ProjectCardProps) {
   return (
     <motion.div
       layout
       variants={fadeInUp}
       key={id}
-      className={
-        "flex flex-col justify-between rounded-lg border bg-background p-4 text-left hover:shadow-md transition-shadow " +
-        (className ?? "")
-      }
+      className={cn(
+        "flex flex-col justify-between rounded-lg border bg-background p-4 text-left hover:shadow-md transition-shadow",
+        className
+      )}
     >
       <div className="space-y-2">
-        <h3 className="font-semibold tracking-tight line-clamp-1">{name}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold tracking-tight line-clamp-1 flex-1">{name}</h3>
+          {language && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+              {languageColor(language) && (
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: languageColor(language) || undefined }}
+                />
+              )}
+              {language}
+            </span>
+          )}
+        </div>
         {description && (
           <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3">{description}</p>
         )}
         <div className="flex flex-wrap gap-1 pt-1">
-          {language && (
-            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">{language}</span>
-          )}
           {topics.slice(0, 3).map((t) => (
             <span
               key={t}
@@ -54,9 +68,14 @@ export function ProjectCard({
           ))}
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <span>★ {stars}</span>
-        <span>Forks {forks}</span>
+      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 text-yellow-500" />{stars}</span>
+          <span className="inline-flex items-center gap-1"><GitFork className="h-3.5 w-3.5" />{forks}</span>
+        </div>
+        {updated_at && (
+          <span className="whitespace-nowrap">{relativeTime(updated_at)}</span>
+        )}
       </div>
     </motion.div>
   );
