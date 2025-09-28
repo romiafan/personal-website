@@ -1,6 +1,6 @@
 # Active TODO Snapshot
 
-> Snapshot Date: 2025-09-28
+> Snapshot Date: 2025-09-28 (Post Issue Sync Update)
 
 ## Legend
 
@@ -33,7 +33,7 @@ All prior P0 items (#1, #2) are completed. Monitoring only.
 
 - [ ] (#19) JSON Tools: Virtualized Rendering
 - [ ] (#20) JSON Tools: Find & Replace
-- [ ] (#21) JSON Tools: Persist Undo/Redo History
+- [x] (#21) JSON Tools: Persist Undo/Redo History
 
 ---
 
@@ -64,6 +64,10 @@ Open Questions:
 - PAT storage strategy (env vs encrypted Convex storage)
 - Public vs partially public toolkit scope
 - Toast system consolidation (custom → shadcn/ui)
+
+### Meta Tracking
+
+Roadmap and TODO are in sync as of this snapshot. Recently validated closure of advanced JSON Tools feature (#18) already present in Completed section of `ROADMAP_ISSUES.md`. No additional closures pending; next focus is on P1 accessibility and rate limiting tasks.
 
 ---
 

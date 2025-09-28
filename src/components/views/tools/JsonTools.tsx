@@ -1,8 +1,14 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useToast } from '@/components/providers/toast-provider';
-import { Button } from '@/components/ui/button';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
+import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
 
 interface ParseResult {
   raw: string;
@@ -13,70 +19,115 @@ interface ParseResult {
 
 function jsonToCsv(json: unknown): { csv: string; rows: number } {
   if (!Array.isArray(json)) {
-    throw new Error('Root JSON must be an array of objects for Excel export');
+    throw new Error("Root JSON must be an array of objects for Excel export");
   }
-  if (json.length === 0) return { csv: '', rows: 0 };
+  if (json.length === 0) return { csv: "", rows: 0 };
   const objects = json as Record<string, unknown>[];
   const headers = Array.from(
     objects.reduce<Set<string>>((acc, obj) => {
-      Object.keys(obj).forEach(k => acc.add(k));
+      Object.keys(obj).forEach((k) => acc.add(k));
       return acc;
     }, new Set())
   );
   const escape = (v: unknown) => {
-    if (v === null || v === undefined) return '';
-    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (v === null || v === undefined) return "";
+    const s = typeof v === "object" ? JSON.stringify(v) : String(v);
     if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
     return s;
   };
-  const lines = [headers.join(',')];
+  const lines = [headers.join(",")];
   for (const obj of objects) {
-    lines.push(headers.map(h => escape(obj[h])).join(','));
+    lines.push(headers.map((h) => escape(obj[h])).join(","));
   }
-  return { csv: lines.join('\n'), rows: objects.length };
+  return { csv: lines.join("\n"), rows: objects.length };
 }
 
 export function JsonTools() {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [result, setResult] = useState<ParseResult | null>(null);
-  const [mode, setMode] = useState<'text' | 'tree' | 'table'>('text');
+  const [mode, setMode] = useState<"text" | "tree" | "table">("text");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [matchPaths, setMatchPaths] = useState<string[]>([]);
   const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
   const [sortKeys, setSortKeys] = useState<boolean>(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<'plain' | 'regex'>('plain');
+  const [searchMode, setSearchMode] = useState<"plain" | "regex">("plain");
   const [depthLimit, setDepthLimit] = useState<number | null>(null);
   const [perfMode, setPerfMode] = useState<boolean>(false);
   const [editPath, setEditPath] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
-  const [searchError, setSearchError] = useState<string>('');
+  const [editValue, setEditValue] = useState<string>("");
+  const [searchError, setSearchError] = useState<string>("");
   // History (undo/redo) for parsed JSON transformations
   const [history, setHistory] = useState<ParseResult[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [persistHistory, setPersistHistory] = useState<boolean>(false);
+  const [historySizeWarning, setHistorySizeWarning] = useState<string>("");
+  // --- Find & Replace (Issue #20 skeleton) ---
+  const [replacePanelOpen, setReplacePanelOpen] = useState(false);
+  const [replacePattern, setReplacePattern] = useState("");
+  const [replaceFlags, setReplaceFlags] = useState("i");
+  const [replaceValue, setReplaceValue] = useState("");
+  const [replaceModeRegex, setReplaceModeRegex] = useState(true);
+  const [replaceError, setReplaceError] = useState("");
+  const [replaceMatchCount, setReplaceMatchCount] = useState<number>(0);
+
+  // LocalStorage keys (centralized)
+  const PREFS_KEY = "jsonToolsPrefs";
+  const HISTORY_KEY = "jsonToolsHistory";
+
+  // Persist history snapshots (raw + formatted only; parsed reconstructed on load)
+  function persistHistorySnapshots(snapshots: ParseResult[]) {
+    try {
+      const minimal = snapshots.slice(-50).map((s) => ({
+        raw: s.raw,
+        formatted: s.formatted,
+      }));
+      const payload = JSON.stringify({ snapshots: minimal });
+      // Guard against excessive size (~200KB)
+      if (payload.length > 200_000) {
+        setHistorySizeWarning(
+          "History persistence skipped: exceeds 200KB (clear or reduce edits)."
+        );
+        return;
+      }
+      localStorage.setItem(HISTORY_KEY, payload);
+      if (historySizeWarning) setHistorySizeWarning("");
+    } catch {
+      /* ignore */
+    }
+  }
 
   function pushHistory(entry: ParseResult) {
-    setHistory(prev => {
+    setHistory((prev) => {
       const capped = prev.slice(0, historyIndex + 1); // drop any forward history
       capped.push(entry);
       // limit to last 50 states
       const trimmed = capped.slice(-50);
       setHistoryIndex(trimmed.length - 1);
+      if (persistHistory)
+        queueMicrotask(() => persistHistorySnapshots(trimmed));
       return trimmed;
     });
   }
 
-
   const undo = useCallback(() => {
-    setHistoryIndex(i => {
+    setHistoryIndex((i) => {
       if (i <= 0) return i;
       const nextIndex = i - 1;
       const restored = history[nextIndex];
       setResult(restored);
       // recompute node count for restored state
       if (restored.parsed) {
-        let count = 0; const walk = (v: unknown) => { count++; if (v && typeof v === 'object') { if (Array.isArray(v)) v.forEach(walk); else Object.values(v as Record<string, unknown>).forEach(walk);} }; walk(restored.parsed);
+        let count = 0;
+        const walk = (v: unknown) => {
+          count++;
+          if (v && typeof v === "object") {
+            if (Array.isArray(v)) v.forEach(walk);
+            else Object.values(v as Record<string, unknown>).forEach(walk);
+          }
+        };
+        walk(restored.parsed);
         setNodeCount(count);
       }
       return nextIndex;
@@ -84,13 +135,21 @@ export function JsonTools() {
   }, [history]);
 
   const redo = useCallback(() => {
-    setHistoryIndex(i => {
+    setHistoryIndex((i) => {
       if (i < 0 || i >= history.length - 1) return i;
       const nextIndex = i + 1;
       const restored = history[nextIndex];
       setResult(restored);
       if (restored.parsed) {
-        let count = 0; const walk = (v: unknown) => { count++; if (v && typeof v === 'object') { if (Array.isArray(v)) v.forEach(walk); else Object.values(v as Record<string, unknown>).forEach(walk);} }; walk(restored.parsed);
+        let count = 0;
+        const walk = (v: unknown) => {
+          count++;
+          if (v && typeof v === "object") {
+            if (Array.isArray(v)) v.forEach(walk);
+            else Object.values(v as Record<string, unknown>).forEach(walk);
+          }
+        };
+        walk(restored.parsed);
         setNodeCount(count);
       }
       return nextIndex;
@@ -99,30 +158,112 @@ export function JsonTools() {
   // Load persisted preferences once on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('jsonToolsPrefs');
+      const stored = localStorage.getItem(PREFS_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as Partial<{ mode: typeof mode; sortKeys: boolean; search: string; searchMode: 'plain' | 'regex'; depthLimit: number | null; perfMode: boolean }>;
-        if (parsed.mode === 'text' || parsed.mode === 'tree' || parsed.mode === 'table') setMode(parsed.mode);
-        if (typeof parsed.sortKeys === 'boolean') setSortKeys(parsed.sortKeys);
-        if (typeof parsed.search === 'string') setSearch(parsed.search);
-        if (parsed.searchMode === 'plain' || parsed.searchMode === 'regex') setSearchMode(parsed.searchMode);
-        if (parsed.depthLimit === null || typeof parsed.depthLimit === 'number') setDepthLimit(parsed.depthLimit ?? null);
-        if (typeof parsed.perfMode === 'boolean') setPerfMode(parsed.perfMode);
+        const unknownParsed: unknown = JSON.parse(stored);
+        if (
+          unknownParsed &&
+          typeof unknownParsed === "object" &&
+          !Array.isArray(unknownParsed)
+        ) {
+          const parsed = unknownParsed as Record<string, unknown>;
+          if (
+            parsed.mode === "text" ||
+            parsed.mode === "tree" ||
+            parsed.mode === "table"
+          )
+            setMode(parsed.mode);
+          if (typeof parsed.sortKeys === "boolean")
+            setSortKeys(parsed.sortKeys);
+          if (typeof parsed.search === "string") setSearch(parsed.search);
+          if (parsed.searchMode === "plain" || parsed.searchMode === "regex")
+            setSearchMode(parsed.searchMode);
+          if (
+            parsed.depthLimit === null ||
+            typeof parsed.depthLimit === "number"
+          )
+            setDepthLimit((parsed.depthLimit as number | null) ?? null);
+          if (typeof parsed.perfMode === "boolean")
+            setPerfMode(parsed.perfMode);
+          if (typeof parsed.persistHistory === "boolean")
+            setPersistHistory(parsed.persistHistory);
+        }
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   // Persist preferences
   useEffect(() => {
     try {
-      const payload = JSON.stringify({ mode, sortKeys, search, searchMode, depthLimit, perfMode });
-      localStorage.setItem('jsonToolsPrefs', payload);
+      const payload = JSON.stringify({
+        mode,
+        sortKeys,
+        search,
+        searchMode,
+        depthLimit,
+        perfMode,
+        persistHistory,
+      });
+      localStorage.setItem(PREFS_KEY, payload);
+    } catch {}
+  }, [
+    mode,
+    sortKeys,
+    search,
+    searchMode,
+    depthLimit,
+    perfMode,
+    persistHistory,
+  ]);
+
+  // Load persisted history when enabled (once) if empty
+  useEffect(() => {
+    if (!persistHistory) return;
+    if (history.length > 0) return; // don't overwrite existing in-memory history
+    try {
+      const stored = localStorage.getItem(HISTORY_KEY);
+      if (!stored) return;
+      const parsed: unknown = JSON.parse(stored);
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        !Array.isArray((parsed as any).snapshots) // eslint-disable-line @typescript-eslint/no-explicit-any
+      )
+        return;
+      const rawSnaps = (
+        parsed as { snapshots: Array<{ raw: string; formatted: string }> }
+      ).snapshots.slice(-50);
+      const rebuilt: ParseResult[] = rawSnaps.map((s) => {
+        let parsedJson: unknown;
+        try {
+          parsedJson = JSON.parse(s.raw);
+        } catch {
+          parsedJson = undefined;
+        }
+        return { raw: s.raw, formatted: s.formatted, parsed: parsedJson };
+      });
+      if (!rebuilt.length) return;
+      setHistory(rebuilt);
+      setHistoryIndex(rebuilt.length - 1);
+      const latest = rebuilt[rebuilt.length - 1];
+      setResult(latest);
+      if (latest.parsed) {
+        let count = 0;
+        const walk = (v: unknown) => {
+          count++;
+          if (v && typeof v === "object") {
+            if (Array.isArray(v)) v.forEach(walk);
+            else Object.values(v as Record<string, unknown>).forEach(walk);
+          }
+        };
+        walk(latest.parsed);
+        setNodeCount(count);
+      }
     } catch {
-      // ignore
+      /* ignore load errors */
     }
-  }, [mode, sortKeys, search, searchMode, depthLimit, perfMode]);
+  }, [persistHistory, history.length]);
   const { push } = useToast();
   const [nodeCount, setNodeCount] = useState<number>(0);
   const LARGE_THRESHOLD = 10000; // heuristic
@@ -132,9 +273,9 @@ export function JsonTools() {
     function handler(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
-      const isTyping = tag === 'input' || tag === 'textarea';
+      const isTyping = tag === "input" || tag === "textarea";
       if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.key.toLowerCase() === 'z') {
+      if (e.key.toLowerCase() === "z") {
         if (e.shiftKey) {
           // redo
           if (!isTyping) {
@@ -143,15 +284,15 @@ export function JsonTools() {
           }
         } else {
           // undo
-            if (!isTyping) {
-              e.preventDefault();
-              undo();
-            }
+          if (!isTyping) {
+            e.preventDefault();
+            undo();
+          }
         }
       }
     }
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [undo, redo]);
 
   function formatJson() {
@@ -164,24 +305,33 @@ export function JsonTools() {
       let count = 0;
       const walk = (v: unknown) => {
         count++;
-        if (v && typeof v === 'object') {
-          if (Array.isArray(v)) v.forEach(walk); else Object.values(v as Record<string, unknown>).forEach(walk);
+        if (v && typeof v === "object") {
+          if (Array.isArray(v)) v.forEach(walk);
+          else Object.values(v as Record<string, unknown>).forEach(walk);
         }
       };
       walk(parsed);
       setNodeCount(count);
-      push({ title: 'Formatted', description: 'JSON formatted successfully', variant: 'success' });
+      push({
+        title: "Formatted",
+        description: "JSON formatted successfully",
+        variant: "success",
+      });
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unknown parse error';
-      setResult({ raw: input, formatted: '', error: message });
-      push({ title: 'Parse Error', description: message, variant: 'error' });
+      const message = e instanceof Error ? e.message : "Unknown parse error";
+      setResult({ raw: input, formatted: "", error: message });
+      push({ title: "Parse Error", description: message, variant: "error" });
     }
   }
 
   function copyFormatted() {
     if (!result?.formatted) return;
     navigator.clipboard.writeText(result.formatted);
-    push({ title: 'Copied', description: 'Formatted JSON copied to clipboard', variant: 'success' });
+    push({
+      title: "Copied",
+      description: "Formatted JSON copied to clipboard",
+      variant: "success",
+    });
   }
 
   function exportCsv() {
@@ -189,46 +339,78 @@ export function JsonTools() {
       const parsed = JSON.parse(input);
       const { csv, rows } = jsonToCsv(parsed);
       if (!csv) {
-        push({ title: 'No Data', description: 'Array is empty; nothing to export', variant: 'error' });
+        push({
+          title: "No Data",
+          description: "Array is empty; nothing to export",
+          variant: "error",
+        });
         return;
       }
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = 'data.csv';
+      a.download = "data.csv";
       a.click();
       URL.revokeObjectURL(url);
-      push({ title: 'Exported', description: `Exported ${rows} rows to CSV`, variant: 'success' });
+      push({
+        title: "Exported",
+        description: `Exported ${rows} rows to CSV`,
+        variant: "success",
+      });
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unknown export error';
-      push({ title: 'Export Failed', description: message, variant: 'error' });
+      const message = e instanceof Error ? e.message : "Unknown export error";
+      push({ title: "Export Failed", description: message, variant: "error" });
     }
   }
 
   // Workbook detection & multi-sheet export (Issue #22)
-  interface Sheet { name: string; data: unknown; }
+  interface Sheet {
+    name: string;
+    data: unknown;
+  }
 
   const workbookSheets = useMemo(() => {
     try {
       if (!input.trim()) return null;
       const parsed = JSON.parse(input);
       const detect = (root: unknown): Sheet[] | null => {
-        if (root && typeof root === 'object' && !Array.isArray(root)) {
+        if (root && typeof root === "object" && !Array.isArray(root)) {
           const obj = root as Record<string, unknown>;
-          const container = (Array.isArray(obj.sheets) ? obj.sheets : Array.isArray(obj.workbook) ? obj.workbook : null) as unknown[] | null;
+          const container = (
+            Array.isArray(obj.sheets)
+              ? obj.sheets
+              : Array.isArray(obj.workbook)
+                ? obj.workbook
+                : null
+          ) as unknown[] | null;
           if (container) {
             const sheets: Sheet[] = container.map((s, i) => {
-              if (s && typeof s === 'object') {
+              if (s && typeof s === "object") {
                 const so = s as Record<string, unknown>;
-                return { name: typeof so.name === 'string' && so.name.trim() ? so.name : `Sheet${i+1}`, data: so.data };
+                return {
+                  name:
+                    typeof so.name === "string" && so.name.trim()
+                      ? so.name
+                      : `Sheet${i + 1}`,
+                  data: so.data,
+                };
               }
-              return { name: `Sheet${i+1}`, data: null };
+              return { name: `Sheet${i + 1}`, data: null };
             });
             return sheets.length ? sheets : null;
           }
           const entries = Object.entries(obj);
-          if (entries.length && entries.every(([, v]) => Array.isArray(v) && (v as unknown[]).every(r => r && typeof r === 'object' && !Array.isArray(r)))) {
+          if (
+            entries.length &&
+            entries.every(
+              ([, v]) =>
+                Array.isArray(v) &&
+                (v as unknown[]).every(
+                  (r) => r && typeof r === "object" && !Array.isArray(r)
+                )
+            )
+          ) {
             return entries.map(([k, v]) => ({ name: k, data: v }));
           }
         }
@@ -243,19 +425,26 @@ export function JsonTools() {
   async function exportWorkbookZip() {
     if (!workbookSheets) return;
     try {
-      const [{ default: JSZip }] = await Promise.all([
-        import('jszip')
-      ]);
+      const [{ default: JSZip }] = await Promise.all([import("jszip")]);
       const zip = new JSZip();
       const skipped: string[] = [];
       let added = 0;
       for (const sheet of workbookSheets) {
         const { name, data } = sheet;
-        if (!Array.isArray(data)) { skipped.push(name); continue; }
-        if (!data.every(r => r && typeof r === 'object' && !Array.isArray(r))) { skipped.push(name); continue; }
+        if (!Array.isArray(data)) {
+          skipped.push(name);
+          continue;
+        }
+        if (
+          !data.every((r) => r && typeof r === "object" && !Array.isArray(r))
+        ) {
+          skipped.push(name);
+          continue;
+        }
         try {
           const { csv, rows } = jsonToCsv(data);
-          const safe = name.replace(/[^A-Za-z0-9-_]+/g,'_') || `Sheet${added+1}`;
+          const safe =
+            name.replace(/[^A-Za-z0-9-_]+/g, "_") || `Sheet${added + 1}`;
           zip.file(`${safe}.csv`, csv);
           added += rows;
         } catch {
@@ -263,20 +452,28 @@ export function JsonTools() {
         }
       }
       if (added === 0) {
-        push({ title: 'Export Failed', description: 'No valid sheet data to export', variant: 'error' });
+        push({
+          title: "Export Failed",
+          description: "No valid sheet data to export",
+          variant: "error",
+        });
         return;
       }
-      const blob = await zip.generateAsync({ type: 'blob' });
+      const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `workbook_export_${Date.now()}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      push({ title: 'Workbook Exported', description: `Sheets exported (${added} rows total)${skipped.length ? `; skipped: ${skipped.join(', ')}` : ''}`, variant: 'success' });
+      push({
+        title: "Workbook Exported",
+        description: `Sheets exported (${added} rows total)${skipped.length ? `; skipped: ${skipped.join(", ")}` : ""}`,
+        variant: "success",
+      });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Workbook export failed';
-      push({ title: 'Export Failed', description: msg, variant: 'error' });
+      const msg = e instanceof Error ? e.message : "Workbook export failed";
+      push({ title: "Export Failed", description: msg, variant: "error" });
     }
   }
 
@@ -286,139 +483,212 @@ export function JsonTools() {
     try {
       const XLSX = await getXLSX();
       // gather normalized sheet data first
-      const normalized = workbookSheets.map(s => {
-        if (!Array.isArray(s.data) || !s.data.every(r => r && typeof r === 'object' && !Array.isArray(r))) return { ...s, rows: [] as Record<string, unknown>[] };
+      const normalized = workbookSheets.map((s) => {
+        if (
+          !Array.isArray(s.data) ||
+          !s.data.every((r) => r && typeof r === "object" && !Array.isArray(r))
+        )
+          return { ...s, rows: [] as Record<string, unknown>[] };
         return { ...s, rows: s.data as Record<string, unknown>[] };
       });
-      const valid = normalized.filter(s => s.rows.length);
+      const valid = normalized.filter((s) => s.rows.length);
       if (!valid.length) {
-        push({ title: 'Export Failed', description: 'No valid sheet rows for XLSX', variant: 'error' });
+        push({
+          title: "Export Failed",
+          description: "No valid sheet rows for XLSX",
+          variant: "error",
+        });
         return;
       }
       // compute cell count for guard
       let cellCount = 0;
       for (const sheet of valid) {
         const keySet = new Set<string>();
-        sheet.rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
+        sheet.rows.forEach((r) => Object.keys(r).forEach((k) => keySet.add(k)));
         cellCount += sheet.rows.length * keySet.size;
       }
       const LARGE_CELL_THRESHOLD = 200_000;
       if (cellCount > LARGE_CELL_THRESHOLD) {
-        const proceed = confirm(`This workbook is large (≈${cellCount.toLocaleString()} cells). Export may be slow. Continue?`);
+        const proceed = confirm(
+          `This workbook is large (≈${cellCount.toLocaleString()} cells). Export may be slow. Continue?`
+        );
         if (!proceed) return;
       }
       const wb = XLSX.utils.book_new();
       for (const sheet of valid) {
         const keyOrder: string[] = [];
         const seen = new Set<string>();
-        sheet.rows.forEach(r => {
-          Object.keys(r).forEach(k => { if (!seen.has(k)) { seen.add(k); keyOrder.push(k); } });
+        sheet.rows.forEach((r) => {
+          Object.keys(r).forEach((k) => {
+            if (!seen.has(k)) {
+              seen.add(k);
+              keyOrder.push(k);
+            }
+          });
         });
-        const dataMatrix = [keyOrder, ...sheet.rows.map(r => keyOrder.map(k => {
-          const v = (r as Record<string, unknown>)[k];
-          if (v === null || v === undefined) return '';
-          if (typeof v === 'object') return JSON.stringify(v);
-          return v as unknown;
-        }))];
+        const dataMatrix = [
+          keyOrder,
+          ...sheet.rows.map((r) =>
+            keyOrder.map((k) => {
+              const v = (r as Record<string, unknown>)[k];
+              if (v === null || v === undefined) return "";
+              if (typeof v === "object") return JSON.stringify(v);
+              return v as unknown;
+            })
+          ),
+        ];
         const ws = XLSX.utils.aoa_to_sheet(dataMatrix);
-        const safe = sheet.name.replace(/[^A-Za-z0-9-_]+/g, '_').slice(0, 31) || 'Sheet';
+        const safe =
+          sheet.name.replace(/[^A-Za-z0-9-_]+/g, "_").slice(0, 31) || "Sheet";
         XLSX.utils.book_append_sheet(wb, ws, safe);
       }
-      const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const wbout = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const blob = new Blob([wbout], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `workbook_export_${Date.now()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      push({ title: 'XLSX Exported', description: `Workbook exported (${valid.length} sheet${valid.length!==1?'s':''})`, variant: 'success' });
+      push({
+        title: "XLSX Exported",
+        description: `Workbook exported (${valid.length} sheet${valid.length !== 1 ? "s" : ""})`,
+        variant: "success",
+      });
     } catch (e: unknown) {
       // If first attempt failed, try one quick retry (e.g., transient chunk load error)
       try {
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 250));
         const XLSX = await getXLSX(true); // force retry path order
         // Re-run simplified flow only if workbookSheets still valid
-        const normalized = workbookSheets.map(s => {
-          if (!Array.isArray(s.data) || !s.data.every(r => r && typeof r === 'object' && !Array.isArray(r))) return { ...s, rows: [] as Record<string, unknown>[] };
+        const normalized = workbookSheets.map((s) => {
+          if (
+            !Array.isArray(s.data) ||
+            !s.data.every(
+              (r) => r && typeof r === "object" && !Array.isArray(r)
+            )
+          )
+            return { ...s, rows: [] as Record<string, unknown>[] };
           return { ...s, rows: s.data as Record<string, unknown>[] };
         });
-        const valid = normalized.filter(s => s.rows.length);
-        if (!valid.length) throw new Error('No valid sheet rows for XLSX');
+        const valid = normalized.filter((s) => s.rows.length);
+        if (!valid.length) throw new Error("No valid sheet rows for XLSX");
         const wb = XLSX.utils.book_new();
         for (const sheet of valid) {
           const keyOrder: string[] = [];
-            const seen = new Set<string>();
-            sheet.rows.forEach(r => {
-              Object.keys(r).forEach(k => { if (!seen.has(k)) { seen.add(k); keyOrder.push(k); } });
+          const seen = new Set<string>();
+          sheet.rows.forEach((r) => {
+            Object.keys(r).forEach((k) => {
+              if (!seen.has(k)) {
+                seen.add(k);
+                keyOrder.push(k);
+              }
             });
-          const dataMatrix = [keyOrder, ...sheet.rows.map(r => keyOrder.map(k => {
-            const v = (r as Record<string, unknown>)[k];
-            if (v === null || v === undefined) return '';
-            if (typeof v === 'object') return JSON.stringify(v);
-            return v as unknown;
-          }))];
+          });
+          const dataMatrix = [
+            keyOrder,
+            ...sheet.rows.map((r) =>
+              keyOrder.map((k) => {
+                const v = (r as Record<string, unknown>)[k];
+                if (v === null || v === undefined) return "";
+                if (typeof v === "object") return JSON.stringify(v);
+                return v as unknown;
+              })
+            ),
+          ];
           const ws = XLSX.utils.aoa_to_sheet(dataMatrix);
-          const safe = sheet.name.replace(/[^A-Za-z0-9-_]+/g, '_').slice(0, 31) || 'Sheet';
+          const safe =
+            sheet.name.replace(/[^A-Za-z0-9-_]+/g, "_").slice(0, 31) || "Sheet";
           XLSX.utils.book_append_sheet(wb, ws, safe);
         }
-        const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const wbout = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+        const blob = new Blob([wbout], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `workbook_export_${Date.now()}.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
-        push({ title: 'XLSX Exported', description: `Workbook exported after retry`, variant: 'success' });
+        push({
+          title: "XLSX Exported",
+          description: `Workbook exported after retry`,
+          variant: "success",
+        });
         return;
       } catch (retryErr: unknown) {
-        const msg = retryErr instanceof Error ? retryErr.message : (e instanceof Error ? e.message : 'XLSX export failed');
-        push({ title: 'Export Failed', description: `XLSX load failed: ${msg}. Try again or reload page.`, variant: 'error' });
+        const msg =
+          retryErr instanceof Error
+            ? retryErr.message
+            : e instanceof Error
+              ? e.message
+              : "XLSX export failed";
+        push({
+          title: "Export Failed",
+          description: `XLSX load failed: ${msg}. Try again or reload page.`,
+          variant: "error",
+        });
       }
     }
   }
 
   // Resilient SheetJS dynamic importer with fallback paths & cache
   // Typed to avoid "any" while accommodating differing build entrypoints.
-  type SheetJSType = typeof import('xlsx');
+  type SheetJSType = typeof import("xlsx");
   const sheetJsRef = useRef<SheetJSType | null>(null);
   const attemptedOnceRef = useRef<boolean>(false);
-  const getXLSX = useCallback(async (forceAlternate = false): Promise<SheetJSType> => {
-    if (sheetJsRef.current) return sheetJsRef.current;
-    const strategies: Array<() => Promise<unknown>> = forceAlternate ? [
-      () => import('xlsx/xlsx.mjs'),
-      () => import('xlsx/dist/xlsx.full.min.js'),
-      () => import('xlsx')
-    ] : [
-      () => import('xlsx'),
-      () => import('xlsx/xlsx.mjs'),
-      () => import('xlsx/dist/xlsx.full.min.js')
-    ];
-    let lastErr: unknown;
-    for (const load of strategies) {
-      try {
-        const mod = await load();
-        const anyMod = mod as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-        const resolved: SheetJSType = anyMod && anyMod.utils
-          ? anyMod
-          : (anyMod?.default && anyMod.default.utils ? anyMod.default : anyMod);
-        if (resolved && resolved.utils) {
-          sheetJsRef.current = resolved;
-          return resolved;
+  const getXLSX = useCallback(
+    async (forceAlternate = false): Promise<SheetJSType> => {
+      if (sheetJsRef.current) return sheetJsRef.current;
+      const strategies: Array<() => Promise<unknown>> = forceAlternate
+        ? [
+            () => import("xlsx/xlsx.mjs"),
+            () => import("xlsx/dist/xlsx.full.min.js"),
+            () => import("xlsx"),
+          ]
+        : [
+            () => import("xlsx"),
+            () => import("xlsx/xlsx.mjs"),
+            () => import("xlsx/dist/xlsx.full.min.js"),
+          ];
+      let lastErr: unknown;
+      for (const load of strategies) {
+        try {
+          const mod = await load();
+          const anyMod = mod as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+          const resolved: SheetJSType =
+            anyMod && anyMod.utils
+              ? anyMod
+              : anyMod?.default && anyMod.default.utils
+                ? anyMod.default
+                : anyMod;
+          if (resolved && resolved.utils) {
+            sheetJsRef.current = resolved;
+            return resolved;
+          }
+        } catch (err) {
+          lastErr = err;
         }
-      } catch (err) {
-        lastErr = err;
       }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error('Unable to load SheetJS');
-  }, []);
+      throw lastErr instanceof Error
+        ? lastErr
+        : new Error("Unable to load SheetJS");
+    },
+    []
+  );
 
   // Idle prefetch once workbook detected to reduce user-perceived latency & surface early chunk errors
   useEffect(() => {
     if (!workbookSheets || attemptedOnceRef.current) return;
     attemptedOnceRef.current = true;
-    const t = setTimeout(() => { getXLSX().catch(() => { /* silently ignore */ }); }, 800);
+    const t = setTimeout(() => {
+      getXLSX().catch(() => {
+        /* silently ignore */
+      });
+    }, 800);
     return () => clearTimeout(t);
   }, [workbookSheets, getXLSX]);
 
@@ -426,32 +696,45 @@ export function JsonTools() {
     try {
       const parsed = result?.parsed ?? JSON.parse(input);
       const minified = JSON.stringify(parsed);
-      setResult(prev => prev ? { ...prev, formatted: minified, raw: prev.raw } : { raw: input, formatted: minified, parsed });
+      setResult((prev) =>
+        prev
+          ? { ...prev, formatted: minified, raw: prev.raw }
+          : { raw: input, formatted: minified, parsed }
+      );
       pushHistory({ raw: result?.raw ?? input, formatted: minified, parsed });
-      push({ title: 'Minified', description: 'JSON minified (whitespace removed)', variant: 'success' });
+      push({
+        title: "Minified",
+        description: "JSON minified (whitespace removed)",
+        variant: "success",
+      });
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Minify failed';
-      push({ title: 'Minify Error', description: message, variant: 'error' });
+      const message = e instanceof Error ? e.message : "Minify failed";
+      push({ title: "Minify Error", description: message, variant: "error" });
     }
   }
 
   function downloadJson() {
     if (!result?.formatted) return;
-    const blob = new Blob([result.formatted], { type: 'application/json' });
+    const blob = new Blob([result.formatted], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'data.json';
+    a.download = "data.json";
     a.click();
     URL.revokeObjectURL(url);
-    push({ title: 'Download', description: 'JSON file downloaded', variant: 'success' });
+    push({
+      title: "Download",
+      description: "JSON file downloaded",
+      variant: "success",
+    });
   }
 
   // Tree helpers
   function toggle(path: string) {
-    setCollapsed(prev => {
+    setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(path)) next.delete(path); else next.add(path);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
       return next;
     });
   }
@@ -460,16 +743,18 @@ export function JsonTools() {
     // naive approach: just expand everything first by clearing, then add all composite paths
     const all = new Set<string>();
     const walk = (v: unknown, path: string) => {
-      if (v && typeof v === 'object') {
+      if (v && typeof v === "object") {
         all.add(path);
         if (Array.isArray(v)) {
           v.forEach((item, i) => walk(item, path ? `${path}.${i}` : String(i)));
         } else {
-          Object.entries(v as Record<string, unknown>).forEach(([k, val]) => walk(val, path ? `${path}.${k}` : k));
+          Object.entries(v as Record<string, unknown>).forEach(([k, val]) =>
+            walk(val, path ? `${path}.${k}` : k)
+          );
         }
       }
     };
-    walk(result.parsed, 'root');
+    walk(result.parsed, "root");
     setCollapsed(all);
   }
   function expandAll() {
@@ -478,55 +763,79 @@ export function JsonTools() {
 
   function collapseToDepth(limit: number) {
     if (!result?.parsed) return;
-    if (limit < 0) { setCollapsed(new Set()); return; }
+    if (limit < 0) {
+      setCollapsed(new Set());
+      return;
+    }
     const coll = new Set<string>();
     const walk = (v: unknown, path: string, depth: number) => {
-      if (v && typeof v === 'object') {
+      if (v && typeof v === "object") {
         if (depth >= limit) {
           coll.add(path);
           return; // don't recurse deeper
         }
         if (Array.isArray(v)) {
-          v.forEach((item, i) => walk(item, path ? `${path}.${i}` : String(i), depth + 1));
+          v.forEach((item, i) =>
+            walk(item, path ? `${path}.${i}` : String(i), depth + 1)
+          );
         } else {
-          Object.entries(v as Record<string, unknown>).forEach(([k, val]) => walk(val, path ? `${path}.${k}` : k, depth + 1));
+          Object.entries(v as Record<string, unknown>).forEach(([k, val]) =>
+            walk(val, path ? `${path}.${k}` : k, depth + 1)
+          );
         }
       }
     };
-    walk(result.parsed, 'root', 0);
+    walk(result.parsed, "root", 0);
     setCollapsed(coll);
   }
 
-  function renderNode(value: unknown, path: string, keyName?: string, depth = 0): React.ReactNode {
+  // --- Renderer Abstraction (Virtualization groundwork - Issue #19) ---
+  // The current implementation is a recursive static renderer. We introduce an interface so we can
+  // later swap in a virtualized list without rewriting editing/search logic.
+  interface JsonTreeRenderer {
+    renderRoot(value: unknown): React.ReactNode;
+  }
+
+  // Flag (temporary) to experiment with future virtualized renderer. Currently only static.
+
+  function renderNode(
+    value: unknown,
+    path: string,
+    keyName?: string,
+    depth = 0
+  ): React.ReactNode {
     // Performance mode truncation: limit number of rendered composite nodes
     // We'll track via a closure counter.
     const isArr = Array.isArray(value);
-    const isObj = !!value && typeof value === 'object' && !isArr;
+    const isObj = !!value && typeof value === "object" && !isArr;
     const composite = isObj || isArr;
-    const displayKey = keyName !== undefined ? <span className="text-sky-600 dark:text-sky-400">{keyName}</span> : null;
+    const displayKey =
+      keyName !== undefined ? (
+        <span className="text-sky-600 dark:text-sky-400">{keyName}</span>
+      ) : null;
     const indent = { paddingLeft: depth * 12 } as const;
     const isMatch = matchPaths.includes(path);
     const isSelected = selectedPath === path;
-    const baseClasses = `leading-5 ${isMatch ? 'bg-yellow-300/30 dark:bg-yellow-600/20' : ''} ${isSelected ? 'ring-1 ring-primary/60 rounded-sm' : ''}`;
+    const baseClasses = `leading-5 ${isMatch ? "bg-yellow-300/30 dark:bg-yellow-600/20" : ""} ${isSelected ? "ring-1 ring-primary/60 rounded-sm" : ""}`;
 
     if (!composite) {
       let display: string;
-      if (typeof value === 'string') display = '"' + value + '"';
-      else if (value === null) display = 'null';
+      if (typeof value === "string") display = '"' + value + '"';
+      else if (value === null) display = "null";
       else display = String(value);
       const isEditing = editPath === path;
       return (
         <div
           key={path}
           style={indent}
-          className={baseClasses + ' cursor-pointer'}
+          className={baseClasses + " cursor-pointer"}
           onClick={() => setSelectedPath(path)}
           onDoubleClick={() => {
-            if (typeof value !== 'object') {
+            if (typeof value !== "object") {
               setEditPath(path);
               // store raw without added quotes for strings
-              if (typeof value === 'string') setEditValue(value);
-              else if (value === null) setEditValue('null');
+              if (typeof value === "string") setEditValue(value);
+              else if (value === null) setEditValue("null");
               else setEditValue(String(value));
             }
           }}
@@ -537,16 +846,32 @@ export function JsonTools() {
             <span className="inline-flex items-center gap-1">
               <input
                 value={editValue}
-                onChange={e => setEditValue(e.target.value)}
+                onChange={(e) => setEditValue(e.target.value)}
                 className="border rounded px-1 py-0.5 text-[11px] bg-background w-40"
                 autoFocus
-                onKeyDown={e => {
-                  if (e.key === 'Enter') applyEdit();
-                  if (e.key === 'Escape') { setEditPath(null); setEditValue(''); }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyEdit();
+                  if (e.key === "Escape") {
+                    setEditPath(null);
+                    setEditValue("");
+                  }
                 }}
               />
-              <button onClick={applyEdit} className="rounded border px-1 py-0.5 text-[10px]">Save</button>
-              <button onClick={() => { setEditPath(null); setEditValue(''); }} className="rounded border px-1 py-0.5 text-[10px]">Cancel</button>
+              <button
+                onClick={applyEdit}
+                className="rounded border px-1 py-0.5 text-[10px]"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setEditPath(null);
+                  setEditValue("");
+                }}
+                className="rounded border px-1 py-0.5 text-[10px]"
+              >
+                Cancel
+              </button>
             </span>
           )}
         </div>
@@ -554,33 +879,54 @@ export function JsonTools() {
     }
 
     const collapsedHere = collapsed.has(path);
-    const size = isArr ? (value as unknown[]).length : Object.keys(value as object).length;
+    const size = isArr
+      ? (value as unknown[]).length
+      : Object.keys(value as object).length;
 
     let childEntries: [string, unknown][] = [];
     if (isObj) {
       childEntries = Object.entries(value as Record<string, unknown>);
-      if (sortKeys) childEntries = [...childEntries].sort((a,b)=> a[0].localeCompare(b[0]));
+      if (sortKeys)
+        childEntries = [...childEntries].sort((a, b) =>
+          a[0].localeCompare(b[0])
+        );
     }
 
     return (
-      <div key={path} style={indent} className={baseClasses + ' cursor-pointer'} onClick={() => setSelectedPath(path)}>
+      <div
+        key={path}
+        style={indent}
+        className={baseClasses + " cursor-pointer"}
+        onClick={() => setSelectedPath(path)}
+      >
         <button
-          onClick={(e) => { e.stopPropagation(); toggle(path); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(path);
+          }}
           className="mr-1 inline-flex items-center justify-center w-4 text-xs select-none"
-          aria-label={collapsedHere ? 'Expand node' : 'Collapse node'}
+          aria-label={collapsedHere ? "Expand node" : "Collapse node"}
         >
-          {collapsedHere ? '+' : '-'}
+          {collapsedHere ? "+" : "-"}
         </button>
         {displayKey && <>{displayKey}: </>}
-        <span className="text-purple-600 dark:text-purple-400">{isArr ? `Array(${size})` : 'Object'}</span>
+        <span className="text-purple-600 dark:text-purple-400">
+          {isArr ? `Array(${size})` : "Object"}
+        </span>
         {!collapsedHere && (
           <div className="mt-1">
-            {isArr && (value as unknown[]).map((v, i) => (
-              <div key={path + '.' + i}>{renderNode(v, path + '.' + i, String(i), depth + 1)}</div>
-            ))}
-            {isObj && childEntries.map(([k,v]) => (
-              <div key={path + '.' + k}>{renderNode(v, path + '.' + k, k, depth + 1)}</div>
-            ))}
+            {isArr &&
+              (value as unknown[]).map((v, i) => (
+                <div key={path + "." + i}>
+                  {renderNode(v, path + "." + i, String(i), depth + 1)}
+                </div>
+              ))}
+            {isObj &&
+              childEntries.map(([k, v]) => (
+                <div key={path + "." + k}>
+                  {renderNode(v, path + "." + k, k, depth + 1)}
+                </div>
+              ))}
           </div>
         )}
       </div>
@@ -588,26 +934,33 @@ export function JsonTools() {
   }
 
   // Wrapper component to apply performance cap while reusing existing renderNode
-  const RenderTreeRoot: React.FC<{ value: unknown; renderNode: typeof renderNode; perfMode: boolean }> = ({ value, renderNode, perfMode }) => {
+  const RenderTreeRoot: React.FC<{
+    value: unknown;
+    renderNode: typeof renderNode;
+    perfMode: boolean;
+  }> = ({ value, renderNode, perfMode }) => {
     const MAX_NODES = 5000; // soft cap
-    if (!perfMode) return <>{renderNode(value, 'root', 'root')}</>;
+    if (!perfMode) return <>{renderNode(value, "root", "root")}</>;
     // We perform a shallow traversal counting nodes; if exceeding cap, render truncated message.
     let count = 0;
     const walkCount = (v: unknown) => {
       count++;
       if (count > MAX_NODES) return;
-      if (v && typeof v === 'object') {
-        if (Array.isArray(v)) v.forEach(walkCount); else Object.values(v as Record<string, unknown>).forEach(walkCount);
+      if (v && typeof v === "object") {
+        if (Array.isArray(v)) v.forEach(walkCount);
+        else Object.values(v as Record<string, unknown>).forEach(walkCount);
       }
     };
     walkCount(value);
-    if (count <= MAX_NODES) return <>{renderNode(value, 'root', 'root')}</>;
+    if (count <= MAX_NODES) return <>{renderNode(value, "root", "root")}</>;
     return (
       <div className="space-y-2">
         <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-400">
-          Performance mode active: structure is very large ({'>'} {MAX_NODES.toLocaleString()} nodes). Display truncated. Disable Perf Off to view full tree (may be slow).
+          Performance mode active: structure is very large ({">"}{" "}
+          {MAX_NODES.toLocaleString()} nodes). Display truncated. Disable Perf
+          Off to view full tree (may be slow).
         </div>
-        {renderNode(value, 'root', 'root')}
+        {renderNode(value, "root", "root")}
       </div>
     );
   };
@@ -617,50 +970,58 @@ export function JsonTools() {
     // parse new primitive
     let newVal: unknown = editValue;
     const trimmed = editValue.trim();
-    if (trimmed === 'null') newVal = null;
-    else if (trimmed === 'true') newVal = true;
-    else if (trimmed === 'false') newVal = false;
-    else if (trimmed === '') newVal = '';
-    else if (!Number.isNaN(Number(trimmed)) && /^-?\d+(\.\d+)?$/.test(trimmed)) newVal = Number(trimmed);
+    if (trimmed === "null") newVal = null;
+    else if (trimmed === "true") newVal = true;
+    else if (trimmed === "false") newVal = false;
+    else if (trimmed === "") newVal = "";
+    else if (!Number.isNaN(Number(trimmed)) && /^-?\d+(\.\d+)?$/.test(trimmed))
+      newVal = Number(trimmed);
     else {
       // treat as string (keep raw)
       newVal = editValue;
     }
     try {
       // clone current parsed to avoid mutation side-effects
-      const rootCopy = structuredClone ? structuredClone(result.parsed) : JSON.parse(JSON.stringify(result.parsed));
-      const parts = editPath.split('.').slice(1); // remove root
+      const rootCopy = structuredClone
+        ? structuredClone(result.parsed)
+        : JSON.parse(JSON.stringify(result.parsed));
+      const parts = editPath.split(".").slice(1); // remove root
       let cur: any = rootCopy; // eslint-disable-line @typescript-eslint/no-explicit-any
       for (let i = 0; i < parts.length - 1; i++) {
         const seg = parts[i];
         if (Array.isArray(cur)) {
           const idx = Number(seg);
-          if (Number.isNaN(idx) || !(idx in cur)) throw new Error('Invalid path');
+          if (Number.isNaN(idx) || !(idx in cur))
+            throw new Error("Invalid path");
           cur = cur[idx];
-        } else if (cur && typeof cur === 'object') {
+        } else if (cur && typeof cur === "object") {
           cur = (cur as Record<string, unknown>)[seg];
         } else {
-          throw new Error('Cannot traverse path');
+          throw new Error("Cannot traverse path");
         }
       }
       const last = parts[parts.length - 1];
       if (Array.isArray(cur)) {
         const idx = Number(last);
-        if (Number.isNaN(idx)) throw new Error('Invalid array index');
+        if (Number.isNaN(idx)) throw new Error("Invalid array index");
         cur[idx] = newVal;
-      } else if (cur && typeof cur === 'object') {
+      } else if (cur && typeof cur === "object") {
         (cur as Record<string, unknown>)[last] = newVal;
-      } else throw new Error('Invalid target for edit');
+      } else throw new Error("Invalid target for edit");
 
       const formatted = JSON.stringify(rootCopy, null, 2);
       setResult({ raw: result.raw, formatted, parsed: rootCopy });
-  pushHistory({ raw: result.raw, formatted, parsed: rootCopy });
+      pushHistory({ raw: result.raw, formatted, parsed: rootCopy });
       setEditPath(null);
-      setEditValue('');
-      push({ title: 'Updated', description: 'Value updated successfully', variant: 'success' });
+      setEditValue("");
+      push({
+        title: "Updated",
+        description: "Value updated successfully",
+        variant: "success",
+      });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Edit failed';
-      push({ title: 'Edit Error', description: msg, variant: 'error' });
+      const msg = e instanceof Error ? e.message : "Edit failed";
+      push({ title: "Edit Error", description: msg, variant: "error" });
     }
   }
 
@@ -668,30 +1029,104 @@ export function JsonTools() {
     if (!result?.parsed) return null;
     if (!Array.isArray(result.parsed)) return null;
     const arr = result.parsed;
-    if (!arr.every(r => r && typeof r === 'object' && !Array.isArray(r))) return null;
+    if (!arr.every((r) => r && typeof r === "object" && !Array.isArray(r)))
+      return null;
     const rows = arr as Record<string, unknown>[];
-    const headers = Array.from(rows.reduce<Set<string>>((acc, r) => { Object.keys(r).forEach(k => acc.add(k)); return acc; }, new Set()));
+    const headers = Array.from(
+      rows.reduce<Set<string>>((acc, r) => {
+        Object.keys(r).forEach((k) => acc.add(k));
+        return acc;
+      }, new Set())
+    );
     return { headers, rows };
   }, [result?.parsed]);
 
-  const showTree: boolean = mode === 'tree' && !!result?.parsed && !result?.error;
+  const showTree: boolean =
+    mode === "tree" && !!result?.parsed && !result?.error;
+
+  // Compute match count for Find & Replace (skeleton only, no mutation yet)
+  useEffect(() => {
+    if (!showTree || !result?.parsed || !replacePattern.trim()) {
+      setReplaceMatchCount(0);
+      setReplaceError("");
+      return;
+    }
+    if (!replaceModeRegex) {
+      const term = replaceFlags.includes("i")
+        ? replacePattern.toLowerCase()
+        : replacePattern;
+      let count = 0;
+      const walk = (val: unknown) => {
+        if (
+          typeof val === "string" ||
+          typeof val === "number" ||
+          typeof val === "boolean" ||
+          val === null
+        ) {
+          const s = val === null ? "null" : String(val);
+          const hay = replaceFlags.includes("i") ? s.toLowerCase() : s;
+          if (hay.includes(term)) count++;
+        }
+        if (val && typeof val === "object") {
+          if (Array.isArray(val)) val.forEach(walk);
+          else Object.values(val as Record<string, unknown>).forEach(walk);
+        }
+      };
+      walk(result.parsed);
+      setReplaceMatchCount(count);
+      setReplaceError("");
+      return;
+    }
+    try {
+      const re = new RegExp(replacePattern, replaceFlags);
+      let count = 0;
+      const walk = (val: unknown) => {
+        if (
+          typeof val === "string" ||
+          typeof val === "number" ||
+          typeof val === "boolean" ||
+          val === null
+        ) {
+          const s = val === null ? "null" : String(val);
+          if (re.test(s)) count++;
+        }
+        if (val && typeof val === "object") {
+          if (Array.isArray(val)) val.forEach(walk);
+          else Object.values(val as Record<string, unknown>).forEach(walk);
+        }
+      };
+      walk(result.parsed);
+      setReplaceMatchCount(count);
+      setReplaceError("");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Invalid regex";
+      setReplaceError(msg);
+      setReplaceMatchCount(0);
+    }
+  }, [
+    replacePattern,
+    replaceFlags,
+    replaceModeRegex,
+    result?.parsed,
+    showTree,
+  ]);
 
   // Search logic: build path index
   useEffect(() => {
     if (!showTree || !result?.parsed || !search.trim()) {
       setMatchPaths([]);
       setActiveMatchIndex(0);
-      setSearchError('');
+      setSearchError("");
       return;
     }
     let matcher: (v: string) => boolean;
-    if (searchMode === 'regex') {
+    if (searchMode === "regex") {
       try {
-        const re = new RegExp(search, 'i');
+        const re = new RegExp(search, "i");
         matcher = (v: string) => re.test(v);
-        setSearchError('');
+        setSearchError("");
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Invalid regex';
+        const msg = e instanceof Error ? e.message : "Invalid regex";
         setSearchError(msg);
         setMatchPaths([]);
         return;
@@ -699,34 +1134,38 @@ export function JsonTools() {
     } else {
       const term = search.toLowerCase();
       matcher = (v: string) => v.toLowerCase().includes(term);
-      setSearchError('');
+      setSearchError("");
     }
     const matches: string[] = [];
     const expandPaths: Set<string> = new Set();
     const walk = (val: unknown, p: string) => {
       let hit = false;
-      if (val === null) hit = matcher('null');
-      else if (typeof val === 'string') hit = matcher(val);
-      else if (typeof val === 'number' || typeof val === 'boolean') hit = matcher(String(val));
-      if (p === 'root') hit = false;
+      if (val === null) hit = matcher("null");
+      else if (typeof val === "string") hit = matcher(val);
+      else if (typeof val === "number" || typeof val === "boolean")
+        hit = matcher(String(val));
+      if (p === "root") hit = false;
       if (hit) {
         matches.push(p);
-        const parts = p.split('.');
+        const parts = p.split(".");
         for (let i = 1; i < parts.length; i++) {
-          expandPaths.add(parts.slice(0, i).join('.'));
+          expandPaths.add(parts.slice(0, i).join("."));
         }
       }
-      if (val && typeof val === 'object') {
-        if (Array.isArray(val)) val.forEach((v,i)=> walk(v, p + '.' + i));
-        else Object.entries(val as Record<string, unknown>).forEach(([k,v]) => walk(v, p + '.' + k));
+      if (val && typeof val === "object") {
+        if (Array.isArray(val)) val.forEach((v, i) => walk(v, p + "." + i));
+        else
+          Object.entries(val as Record<string, unknown>).forEach(([k, v]) =>
+            walk(v, p + "." + k)
+          );
       }
     };
-    walk(result.parsed, 'root');
+    walk(result.parsed, "root");
     // Expand ancestors of matches
     if (expandPaths.size) {
-      setCollapsed(prev => {
+      setCollapsed((prev) => {
         const next = new Set(prev);
-        expandPaths.forEach(a => next.delete(a));
+        expandPaths.forEach((a) => next.delete(a));
         return next;
       });
     }
@@ -736,8 +1175,23 @@ export function JsonTools() {
 
   function nextMatch(offset: number) {
     if (matchPaths.length === 0) return;
-    setActiveMatchIndex(i => (i + offset + matchPaths.length) % matchPaths.length);
+    setActiveMatchIndex(
+      (i) => (i + offset + matchPaths.length) % matchPaths.length
+    );
   }
+
+  // Renderer implementations (currently only static). Virtual placeholder reserved.
+  const staticRenderer: JsonTreeRenderer = {
+    renderRoot: (value: unknown) => (
+      <RenderTreeRoot
+        value={value}
+        renderNode={renderNode}
+        perfMode={perfMode}
+      />
+    ),
+  };
+
+  const activeRenderer: JsonTreeRenderer = staticRenderer; // swap when virtual renderer added
 
   return (
     <div className="space-y-4">
@@ -745,46 +1199,119 @@ export function JsonTools() {
         <h2 className="font-semibold tracking-tight">JSON Tools</h2>
         <div className="flex gap-2 flex-wrap items-center">
           <div className="flex rounded-md overflow-hidden border">
-            {(['text','tree','table'] as const).map(m => (
-              <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 text-xs font-medium ${mode===m? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>{m.toUpperCase()}</button>
+            {(["text", "tree", "table"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-2 py-1 text-xs font-medium ${mode === m ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+              >
+                {m.toUpperCase()}
+              </button>
             ))}
           </div>
           <div className="flex rounded-md overflow-hidden border">
             <button
               onClick={undo}
-              disabled={! (historyIndex > 0)}
-              className={`px-2 py-1 text-xs font-medium disabled:opacity-40 ${historyIndex>0? 'hover:bg-muted' : ''}`}
+              disabled={!(historyIndex > 0)}
+              className={`px-2 py-1 text-xs font-medium disabled:opacity-40 ${historyIndex > 0 ? "hover:bg-muted" : ""}`}
               title="Undo (⌘/Ctrl+Z)"
-            >Undo</button>
+            >
+              Undo
+            </button>
             <button
               onClick={redo}
-              disabled={! (historyIndex >=0 && historyIndex < history.length -1)}
-              className={`px-2 py-1 text-xs font-medium disabled:opacity-40 ${historyIndex>=0 && historyIndex < history.length -1? 'hover:bg-muted' : ''}`}
+              disabled={
+                !(historyIndex >= 0 && historyIndex < history.length - 1)
+              }
+              className={`px-2 py-1 text-xs font-medium disabled:opacity-40 ${historyIndex >= 0 && historyIndex < history.length - 1 ? "hover:bg-muted" : ""}`}
               title="Redo (⌘/Ctrl+Shift+Z)"
-            >Redo</button>
+            >
+              Redo
+            </button>
           </div>
-          <Button onClick={formatJson} size="sm">Format</Button>
-          <Button onClick={copyFormatted} disabled={!result?.formatted} size="sm" variant="outline">Copy</Button>
-          <Button onClick={exportCsv} size="sm" variant="secondary">JSON → CSV</Button>
+          <Button onClick={formatJson} size="sm">
+            Format
+          </Button>
+          <Button
+            onClick={copyFormatted}
+            disabled={!result?.formatted}
+            size="sm"
+            variant="outline"
+          >
+            Copy
+          </Button>
+          <Button onClick={exportCsv} size="sm" variant="secondary">
+            JSON → CSV
+          </Button>
           {workbookSheets && (
             <>
-              <Button onClick={exportWorkbookZip} size="sm" variant="outline" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</Button>
-              <Button onClick={exportWorkbookXlsx} size="sm" variant="outline" title="Export workbook as XLSX (SheetJS)">Export XLSX</Button>
+              <Button
+                onClick={exportWorkbookZip}
+                size="sm"
+                variant="outline"
+                title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP"
+              >
+                Export Sheets (ZIP)
+              </Button>
+              <Button
+                onClick={exportWorkbookXlsx}
+                size="sm"
+                variant="outline"
+                title="Export workbook as XLSX (SheetJS)"
+              >
+                Export XLSX
+              </Button>
             </>
           )}
-          <Button onClick={minifyJson} disabled={!result?.parsed} size="sm" variant="outline">Minify</Button>
-          <Button onClick={downloadJson} disabled={!result?.formatted} size="sm" variant="outline">Download</Button>
+          <Button
+            onClick={minifyJson}
+            disabled={!result?.parsed}
+            size="sm"
+            variant="outline"
+          >
+            Minify
+          </Button>
+          <Button
+            onClick={downloadJson}
+            disabled={!result?.formatted}
+            size="sm"
+            variant="outline"
+          >
+            Download
+          </Button>
           {showTree ? (
             <div className="flex gap-1 items-center">
-              <Button onClick={expandAll} size="sm" variant="outline" className="h-7 px-2 text-xs">Expand All</Button>
-              <Button onClick={collapseAll} size="sm" variant="outline" className="h-7 px-2 text-xs">Collapse All</Button>
-              <Button onClick={() => setSortKeys(s => !s)} size="sm" variant={sortKeys ? 'default' : 'outline'} className="h-7 px-2 text-xs">{sortKeys ? 'Unsort Keys' : 'Sort Keys'}</Button>
+              <Button
+                onClick={expandAll}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Expand All
+              </Button>
+              <Button
+                onClick={collapseAll}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Collapse All
+              </Button>
+              <Button
+                onClick={() => setSortKeys((s) => !s)}
+                size="sm"
+                variant={sortKeys ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+              >
+                {sortKeys ? "Unsort Keys" : "Sort Keys"}
+              </Button>
               <div className="flex items-center gap-1 text-[10px] ml-1">
                 <span className="text-muted-foreground">Depth</span>
                 <select
-                  value={depthLimit === null ? '' : depthLimit}
-                  onChange={e => {
-                    const v = e.target.value === '' ? null : Number(e.target.value);
+                  value={depthLimit === null ? "" : depthLimit}
+                  onChange={(e) => {
+                    const v =
+                      e.target.value === "" ? null : Number(e.target.value);
                     setDepthLimit(v);
                     if (v === null) {
                       // reset collapse state
@@ -796,108 +1323,300 @@ export function JsonTools() {
                   className="border rounded px-1 py-0.5 bg-background"
                 >
                   <option value="">All</option>
-                  {[0,1,2,3,4,5,6].map(d => <option key={d} value={d}>{d}</option>)}
+                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </select>
               </div>
-            <Button
-              onClick={() => setPerfMode(p => !p)}
-              size="sm"
-              variant={perfMode ? 'default' : 'outline'}
-              className="h-7 px-2 text-xs"
-              title="Performance mode caps rendered nodes for very large JSON"
-            >{perfMode ? 'Perf On' : 'Perf Off'}</Button>
+              <Button
+                onClick={() => setPerfMode((p) => !p)}
+                size="sm"
+                variant={perfMode ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                title="Performance mode caps rendered nodes for very large JSON"
+              >
+                {perfMode ? "Perf On" : "Perf Off"}
+              </Button>
             </div>
           ) : null}
+          {showTree && (
+            <Button
+              onClick={() => setReplacePanelOpen((o) => !o)}
+              size="sm"
+              variant={replacePanelOpen ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+            >
+              {replacePanelOpen ? "Hide Replace" : "Find & Replace"}
+            </Button>
+          )}
         </div>
       </div>
       {showTree && (
         <div className="flex items-center gap-2 text-xs">
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
             className="w-56 rounded-md border bg-background px-2 py-1"
           />
           {search && (
             <>
-              <span className="text-muted-foreground">{matchPaths.length} match{matchPaths.length!==1 && 'es'}</span>
-              <Button disabled={!matchPaths.length} onClick={() => nextMatch(-1)} size="sm" variant="outline" className="h-7 px-2 text-xs">Prev</Button>
-              <Button disabled={!matchPaths.length} onClick={() => nextMatch(1)} size="sm" variant="outline" className="h-7 px-2 text-xs">Next</Button>
-              {matchPaths.length > 0 && <span className="text-muted-foreground">{activeMatchIndex+1}/{matchPaths.length}</span>}
+              <span className="text-muted-foreground">
+                {matchPaths.length} match{matchPaths.length !== 1 && "es"}
+              </span>
+              <Button
+                disabled={!matchPaths.length}
+                onClick={() => nextMatch(-1)}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Prev
+              </Button>
+              <Button
+                disabled={!matchPaths.length}
+                onClick={() => nextMatch(1)}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Next
+              </Button>
+              {matchPaths.length > 0 && (
+                <span className="text-muted-foreground">
+                  {activeMatchIndex + 1}/{matchPaths.length}
+                </span>
+              )}
             </>
           )}
           <Button
-            onClick={() => setSearchMode(m => m === 'plain' ? 'regex' : 'plain')}
+            onClick={() =>
+              setSearchMode((m) => (m === "plain" ? "regex" : "plain"))
+            }
             size="sm"
-            variant={searchMode === 'regex' ? 'default' : 'outline'}
+            variant={searchMode === "regex" ? "default" : "outline"}
             className="h-7 px-2 text-xs"
-          >{searchMode === 'regex' ? 'Regex' : 'Plain'}</Button>
-          {searchError && <span className="text-red-600 dark:text-red-400 text-[10px]" title={searchError}>Regex Error</span>}
+          >
+            {searchMode === "regex" ? "Regex" : "Plain"}
+          </Button>
+          {searchError && (
+            <span
+              className="text-red-600 dark:text-red-400 text-[10px]"
+              title={searchError}
+            >
+              Regex Error
+            </span>
+          )}
           {selectedPath && (
             <div className="flex items-center gap-1">
-              <span className="text-muted-foreground truncate max-w-[180px]" title={selectedPath}>Selected: {selectedPath.replace(/^root\.?/,'')}</span>
+              <span
+                className="text-muted-foreground truncate max-w-[180px]"
+                title={selectedPath}
+              >
+                Selected: {selectedPath.replace(/^root\.?/, "")}
+              </span>
               <Button
                 onClick={() => {
-                  const pathToCopy = selectedPath.replace(/^root\.?/,'');
-                  navigator.clipboard.writeText(pathToCopy || 'root');
-                  push({ title: 'Copied', description: 'Path copied to clipboard', variant: 'success'});
+                  const pathToCopy = selectedPath.replace(/^root\.?/, "");
+                  navigator.clipboard.writeText(pathToCopy || "root");
+                  push({
+                    title: "Copied",
+                    description: "Path copied to clipboard",
+                    variant: "success",
+                  });
                 }}
-                size="sm" variant="outline" className="h-7 px-2 text-xs"
-              >Copy Path</Button>
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Copy Path
+              </Button>
               <Button
                 onClick={() => {
                   // Convert to JSON Pointer (RFC6901)
                   // root.a.b.0 -> /a/b/0
-                  const rel = selectedPath.replace(/^root\.?/, '');
+                  const rel = selectedPath.replace(/^root\.?/, "");
                   if (!rel) {
-                    navigator.clipboard.writeText('');
-                    push({ title: 'Copied', description: 'Root pointer copied', variant: 'success'});
+                    navigator.clipboard.writeText("");
+                    push({
+                      title: "Copied",
+                      description: "Root pointer copied",
+                      variant: "success",
+                    });
                     return;
                   }
-                  const pointer = '/' + rel.split('.').map(seg => seg.replace(/~/g,'~0').replace(/\//g,'~1')).join('/');
+                  const pointer =
+                    "/" +
+                    rel
+                      .split(".")
+                      .map((seg) =>
+                        seg.replace(/~/g, "~0").replace(/\//g, "~1")
+                      )
+                      .join("/");
                   navigator.clipboard.writeText(pointer);
-                  push({ title: 'Copied', description: 'JSON Pointer copied', variant: 'success'});
+                  push({
+                    title: "Copied",
+                    description: "JSON Pointer copied",
+                    variant: "success",
+                  });
                 }}
-                size="sm" variant="outline" className="h-7 px-2 text-xs"
-              >Copy Pointer</Button>
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Copy Pointer
+              </Button>
               <Button
                 onClick={() => {
                   if (!result?.parsed) return;
-                  const parts = selectedPath.split('.').slice(1); // remove synthetic root
+                  const parts = selectedPath.split(".").slice(1); // remove synthetic root
                   let cur: unknown = result.parsed as unknown;
                   for (const part of parts) {
-                    if (part === '') continue;
+                    if (part === "") continue;
                     if (cur === null || cur === undefined) break;
-                    if (typeof cur === 'object') {
+                    if (typeof cur === "object") {
                       if (Array.isArray(cur)) {
                         const idx = Number(part);
-                        if (!Number.isNaN(idx)) cur = (cur as unknown[])[idx]; else { cur = undefined; break; }
+                        if (!Number.isNaN(idx)) cur = (cur as unknown[])[idx];
+                        else {
+                          cur = undefined;
+                          break;
+                        }
                       } else {
                         cur = (cur as Record<string, unknown>)[part];
                       }
                     } else {
-                      cur = undefined; break;
+                      cur = undefined;
+                      break;
                     }
                   }
-                  const valStr = typeof cur === 'object' ? JSON.stringify(cur) : String(cur ?? '');
+                  const valStr =
+                    typeof cur === "object"
+                      ? JSON.stringify(cur)
+                      : String(cur ?? "");
                   navigator.clipboard.writeText(valStr);
-                  push({ title: 'Copied', description: 'Value copied to clipboard', variant: 'success'});
+                  push({
+                    title: "Copied",
+                    description: "Value copied to clipboard",
+                    variant: "success",
+                  });
                 }}
-                size="sm" variant="outline" className="h-7 px-2 text-xs"
-              >Copy Value</Button>
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+              >
+                Copy Value
+              </Button>
             </div>
           )}
         </div>
       )}
+      {showTree && replacePanelOpen && (
+        <div className="rounded-md border bg-muted/40 p-3 space-y-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Pattern</label>
+              <input
+                value={replacePattern}
+                onChange={(e) => setReplacePattern(e.target.value)}
+                className="rounded border bg-background px-2 py-1 text-xs w-56"
+                placeholder={replaceModeRegex ? "regex e.g. foo.*bar" : "text"}
+              />
+            </div>
+            {replaceModeRegex && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-medium">Flags</label>
+                <input
+                  value={replaceFlags}
+                  onChange={(e) =>
+                    setReplaceFlags(e.target.value.replace(/[^gimsuy]/g, ""))
+                  }
+                  className="rounded border bg-background px-2 py-1 text-xs w-20"
+                  placeholder="flags"
+                />
+              </div>
+            )}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Replacement</label>
+              <input
+                value={replaceValue}
+                onChange={(e) => setReplaceValue(e.target.value)}
+                className="rounded border bg-background px-2 py-1 text-xs w-56"
+                placeholder="replacement text"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Mode</label>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2 text-[11px]"
+                onClick={() => {
+                  setReplaceModeRegex((r) => !r);
+                  setReplaceError("");
+                }}
+              >
+                {replaceModeRegex ? "Regex" : "Plain"}
+              </Button>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Matches</label>
+              <div className="text-xs h-8 flex items-center px-2 border rounded bg-background">
+                {replaceError ? "—" : replaceMatchCount}
+              </div>
+            </div>
+            <div className="flex gap-2 items-center ml-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="h-8 px-3 text-[11px]"
+                title="Preview pending implementation"
+              >
+                Preview
+              </Button>
+              <Button
+                size="sm"
+                disabled
+                className="h-8 px-3 text-[11px]"
+                title="Replace One (pending)"
+              >
+                Replace One
+              </Button>
+              <Button
+                size="sm"
+                disabled
+                className="h-8 px-3 text-[11px]"
+                title="Replace All (pending)"
+              >
+                Replace All
+              </Button>
+            </div>
+          </div>
+          {replaceError && (
+            <p className="text-[10px] text-red-600 dark:text-red-400">
+              {replaceError}
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Skeleton only: replacements disabled. Future implementation will
+            batch edits into one undo step and respect perf mode limits.
+          </p>
+        </div>
+      )}
       {showTree && nodeCount > LARGE_THRESHOLD && (
         <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-[11px] leading-snug text-yellow-700 dark:text-yellow-400">
-          Large JSON detected (~{nodeCount.toLocaleString()} nodes). Auto-expansion is limited; consider searching or sorting selectively for performance.
+          Large JSON detected (~{nodeCount.toLocaleString()} nodes).
+          Auto-expansion is limited; consider searching or sorting selectively
+          for performance.
         </div>
       )}
       <textarea
         value={input}
-        onChange={e => setInput(e.target.value)}
-        placeholder='Paste JSON here...'
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Paste JSON here..."
         className="w-full h-80 rounded-md border bg-background px-3 py-2 text-sm font-mono resize-none focus-visible:ring focus-visible:ring-primary/30"
       />
       {result?.error && (
@@ -905,33 +1624,54 @@ export function JsonTools() {
           {result.error}
         </div>
       )}
-      {!result?.error && mode === 'text' && result?.formatted && (
-        <pre className="rounded-md border bg-muted p-3 text-xs max-h-96 overflow-auto font-mono whitespace-pre">{result.formatted}</pre>
+      {!result?.error && mode === "text" && result?.formatted && (
+        <pre className="rounded-md border bg-muted p-3 text-xs max-h-96 overflow-auto font-mono whitespace-pre">
+          {result.formatted}
+        </pre>
       )}
       {showTree && (
         <div className="rounded-md border bg-muted/40 p-3 text-xs max-h-96 overflow-auto font-mono">
-          {result?.parsed ? (
-            <RenderTreeRoot value={result.parsed as unknown} renderNode={renderNode} perfMode={perfMode} />
-          ) : null}
+          {result?.parsed
+            ? activeRenderer.renderRoot(result.parsed as unknown)
+            : null}
         </div>
       )}
-      {mode === 'table' && (
-        tableData ? (
+      {mode === "table" &&
+        (tableData ? (
           <div className="rounded-md border overflow-auto max-h-96">
             <table className="w-full text-xs">
               <thead className="bg-muted/60">
-                <tr>{tableData.headers.map(h => <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>)}</tr>
+                <tr>
+                  {tableData.headers.map((h) => (
+                    <th key={h} className="px-2 py-1 text-left font-medium">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
-                {tableData.rows.map((r,i) => (
+                {tableData.rows.map((r, i) => (
                   <tr key={i} className="odd:bg-muted/30">
-                    {tableData.headers.map(h => {
+                    {tableData.headers.map((h) => {
                       const v = r[h];
                       let cell: string;
-                      if (v === null || v === undefined) cell = '';
-                      else if (typeof v === 'object') cell = JSON.stringify(v).slice(0,120);
+                      if (v === null || v === undefined) cell = "";
+                      else if (typeof v === "object")
+                        cell = JSON.stringify(v).slice(0, 120);
                       else cell = String(v);
-                      return <td key={h} className="px-2 py-1 align-top" title={typeof v === 'object' ? JSON.stringify(v) : undefined}>{cell}</td>;
+                      return (
+                        <td
+                          key={h}
+                          className="px-2 py-1 align-top"
+                          title={
+                            typeof v === "object"
+                              ? JSON.stringify(v)
+                              : undefined
+                          }
+                        >
+                          {cell}
+                        </td>
+                      );
                     })}
                   </tr>
                 ))}
@@ -939,10 +1679,52 @@ export function JsonTools() {
             </table>
           </div>
         ) : (
-          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">Table view requires an array of plain objects.</div>
-        )
+          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Table view requires an array of plain objects.
+          </div>
+        ))}
+      <p className="text-[10px] text-muted-foreground">
+        Modes: Text (raw pretty JSON), Tree (expand/collapse nodes), Table
+        (array of objects). Large payloads may be slower – consider trimming
+        before formatting.
+      </p>
+      {showTree && (
+        <div className="flex items-center gap-1 ml-2 pl-2 border-l border-border/60">
+          <label className="flex items-center gap-1 text-[10px] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={persistHistory}
+              onChange={(e) => setPersistHistory(e.target.checked)}
+              className="accent-primary"
+            />
+            Persist History (exp)
+          </label>
+          {persistHistory && history.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[10px]"
+              onClick={() => {
+                setHistory([]);
+                setHistoryIndex(-1);
+                setResult(null);
+                setHistorySizeWarning("");
+                try {
+                  localStorage.removeItem(HISTORY_KEY);
+                } catch {}
+              }}
+              title="Clear persisted history"
+            >
+              Clear
+            </Button>
+          )}
+        </div>
       )}
-      <p className="text-[10px] text-muted-foreground">Modes: Text (raw pretty JSON), Tree (expand/collapse nodes), Table (array of objects). Large payloads may be slower – consider trimming before formatting.</p>
+      {historySizeWarning && (
+        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+          {historySizeWarning}
+        </p>
+      )}
     </div>
   );
 }
