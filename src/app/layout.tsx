@@ -58,26 +58,7 @@ export default function RootLayout({
             __html: `(() => { try { const ls = localStorage.getItem('theme'); const mql = window.matchMedia('(prefers-color-scheme: dark)'); const system = mql.matches ? 'dark' : 'light'; const theme = ls === 'light' || ls === 'dark' ? ls : system; if (theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); } catch(_) {} })();`
           }}
         />
-        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
-          <ClerkProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <ConvexClientProvider>
-                <ToastProvider>
-                  <div className="relative flex min-h-screen flex-col">
-                    <Navbar />
-                    <main className="flex-1">{children}</main>
-                    <Footer />
-                  </div>
-                </ToastProvider>
-              </ConvexClientProvider>
-            </ThemeProvider>
-          </ClerkProvider>
-        ) : (
+        <ClerkProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -94,7 +75,7 @@ export default function RootLayout({
               </ToastProvider>
             </ConvexClientProvider>
           </ThemeProvider>
-        )}
+        </ClerkProvider>
       </body>
     </html>
   );

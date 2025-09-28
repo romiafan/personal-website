@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/components/providers/toast-provider';
 
 interface ParseResult {
@@ -283,6 +283,7 @@ export function JsonTools() {
   async function exportWorkbookXlsx() {
     if (!workbookSheets) return;
     try {
+      const XLSX = await getXLSX();
       // gather normalized sheet data first
       const normalized = workbookSheets.map(s => {
         if (!Array.isArray(s.data) || !s.data.every(r => r && typeof r === 'object' && !Array.isArray(r))) return { ...s, rows: [] as Record<string, unknown>[] };
@@ -305,8 +306,6 @@ export function JsonTools() {
         const proceed = confirm(`This workbook is large (≈${cellCount.toLocaleString()} cells). Export may be slow. Continue?`);
         if (!proceed) return;
       }
-      const XLSXMod = await import('xlsx');
-      const XLSX = XLSXMod; // sheetjs export namespace
       const wb = XLSX.utils.book_new();
       for (const sheet of valid) {
         const keyOrder: string[] = [];
@@ -334,10 +333,93 @@ export function JsonTools() {
       URL.revokeObjectURL(url);
       push({ title: 'XLSX Exported', description: `Workbook exported (${valid.length} sheet${valid.length!==1?'s':''})`, variant: 'success' });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'XLSX export failed';
-      push({ title: 'Export Failed', description: msg, variant: 'error' });
+      // If first attempt failed, try one quick retry (e.g., transient chunk load error)
+      try {
+        await new Promise(r => setTimeout(r, 250));
+        const XLSX = await getXLSX(true); // force retry path order
+        // Re-run simplified flow only if workbookSheets still valid
+        const normalized = workbookSheets.map(s => {
+          if (!Array.isArray(s.data) || !s.data.every(r => r && typeof r === 'object' && !Array.isArray(r))) return { ...s, rows: [] as Record<string, unknown>[] };
+          return { ...s, rows: s.data as Record<string, unknown>[] };
+        });
+        const valid = normalized.filter(s => s.rows.length);
+        if (!valid.length) throw new Error('No valid sheet rows for XLSX');
+        const wb = XLSX.utils.book_new();
+        for (const sheet of valid) {
+          const keyOrder: string[] = [];
+            const seen = new Set<string>();
+            sheet.rows.forEach(r => {
+              Object.keys(r).forEach(k => { if (!seen.has(k)) { seen.add(k); keyOrder.push(k); } });
+            });
+          const dataMatrix = [keyOrder, ...sheet.rows.map(r => keyOrder.map(k => {
+            const v = (r as Record<string, unknown>)[k];
+            if (v === null || v === undefined) return '';
+            if (typeof v === 'object') return JSON.stringify(v);
+            return v as unknown;
+          }))];
+          const ws = XLSX.utils.aoa_to_sheet(dataMatrix);
+          const safe = sheet.name.replace(/[^A-Za-z0-9-_]+/g, '_').slice(0, 31) || 'Sheet';
+          XLSX.utils.book_append_sheet(wb, ws, safe);
+        }
+        const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `workbook_export_${Date.now()}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        push({ title: 'XLSX Exported', description: `Workbook exported after retry`, variant: 'success' });
+        return;
+      } catch (retryErr: unknown) {
+        const msg = retryErr instanceof Error ? retryErr.message : (e instanceof Error ? e.message : 'XLSX export failed');
+        push({ title: 'Export Failed', description: `XLSX load failed: ${msg}. Try again or reload page.`, variant: 'error' });
+      }
     }
   }
+
+  // Resilient SheetJS dynamic importer with fallback paths & cache
+  // Typed to avoid "any" while accommodating differing build entrypoints.
+  type SheetJSType = typeof import('xlsx');
+  const sheetJsRef = useRef<SheetJSType | null>(null);
+  const attemptedOnceRef = useRef<boolean>(false);
+  const getXLSX = useCallback(async (forceAlternate = false): Promise<SheetJSType> => {
+    if (sheetJsRef.current) return sheetJsRef.current;
+    const strategies: Array<() => Promise<unknown>> = forceAlternate ? [
+      () => import('xlsx/xlsx.mjs'),
+      () => import('xlsx/dist/xlsx.full.min.js'),
+      () => import('xlsx')
+    ] : [
+      () => import('xlsx'),
+      () => import('xlsx/xlsx.mjs'),
+      () => import('xlsx/dist/xlsx.full.min.js')
+    ];
+    let lastErr: unknown;
+    for (const load of strategies) {
+      try {
+        const mod = await load();
+        const anyMod = mod as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const resolved: SheetJSType = anyMod && anyMod.utils
+          ? anyMod
+          : (anyMod?.default && anyMod.default.utils ? anyMod.default : anyMod);
+        if (resolved && resolved.utils) {
+          sheetJsRef.current = resolved;
+          return resolved;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('Unable to load SheetJS');
+  }, []);
+
+  // Idle prefetch once workbook detected to reduce user-perceived latency & surface early chunk errors
+  useEffect(() => {
+    if (!workbookSheets || attemptedOnceRef.current) return;
+    attemptedOnceRef.current = true;
+    const t = setTimeout(() => { getXLSX().catch(() => { /* silently ignore */ }); }, 800);
+    return () => clearTimeout(t);
+  }, [workbookSheets, getXLSX]);
 
   function minifyJson() {
     try {
