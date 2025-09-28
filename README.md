@@ -11,7 +11,7 @@ A modern personal site + utilities hub built with a strict TypeScript-first + Ap
 | Styling         | Tailwind CSS v4, shadcn/ui (New York theme, slate palette)  |
 | Animations      | Framer Motion (centralized variants in `src/lib/motion.ts`) |
 | Backend (data)  | Convex (real-time queries + mutations)                      |
-| Auth            | Clerk (always-on provider)                                   |
+| Auth            | Clerk (always-on provider)                                  |
 | Package Manager | pnpm 9 (pinned via `packageManager`)                        |
 | Icons           | lucide-react                                                |
 | Deployment      | Vercel                                                      |
@@ -155,6 +155,7 @@ Planned / Backlog:
 - Bulk multi-node JSON edits & find/replace
 - Shareable permalink state for JSON tool configurations
 <!-- XLSX export implemented via Issue #23 -->
+
 ### Resilient XLSX Loading
 
 The XLSX export uses a resilient dynamic loader that attempts multiple entrypoints (`xlsx`, `xlsx/xlsx.mjs`, `xlsx/dist/xlsx.full.min.js`) with a retry + idle prefetch to mitigate transient chunk load failures in some production edge cases. Ambient module declarations ensure strict typing.

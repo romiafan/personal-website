@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/components/providers/toast-provider';
+import { Button } from '@/components/ui/button';
 
 interface ParseResult {
   raw: string;
@@ -762,22 +763,22 @@ export function JsonTools() {
               title="Redo (⌘/Ctrl+Shift+Z)"
             >Redo</button>
           </div>
-          <button onClick={formatJson} className="rounded-md border px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">Format</button>
-          <button onClick={copyFormatted} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Copy</button>
-          <button onClick={exportCsv} className="rounded-md border px-3 py-1.5 text-sm font-medium">JSON → CSV</button>
+          <Button onClick={formatJson} size="sm">Format</Button>
+          <Button onClick={copyFormatted} disabled={!result?.formatted} size="sm" variant="outline">Copy</Button>
+          <Button onClick={exportCsv} size="sm" variant="secondary">JSON → CSV</Button>
           {workbookSheets && (
             <>
-              <button onClick={exportWorkbookZip} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</button>
-              <button onClick={exportWorkbookXlsx} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Export workbook as XLSX (SheetJS)">Export XLSX</button>
+              <Button onClick={exportWorkbookZip} size="sm" variant="outline" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</Button>
+              <Button onClick={exportWorkbookXlsx} size="sm" variant="outline" title="Export workbook as XLSX (SheetJS)">Export XLSX</Button>
             </>
           )}
-          <button onClick={minifyJson} disabled={!result?.parsed} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Minify</button>
-          <button onClick={downloadJson} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Download</button>
+          <Button onClick={minifyJson} disabled={!result?.parsed} size="sm" variant="outline">Minify</Button>
+          <Button onClick={downloadJson} disabled={!result?.formatted} size="sm" variant="outline">Download</Button>
           {showTree ? (
             <div className="flex gap-1 items-center">
-              <button onClick={expandAll} className="rounded border px-2 py-1 text-xs">Expand All</button>
-              <button onClick={collapseAll} className="rounded border px-2 py-1 text-xs">Collapse All</button>
-              <button onClick={() => setSortKeys(s => !s)} className={`rounded border px-2 py-1 text-xs ${sortKeys ? 'bg-accent text-accent-foreground' : ''}`}>{sortKeys ? 'Unsort Keys' : 'Sort Keys'}</button>
+              <Button onClick={expandAll} size="sm" variant="outline" className="h-7 px-2 text-xs">Expand All</Button>
+              <Button onClick={collapseAll} size="sm" variant="outline" className="h-7 px-2 text-xs">Collapse All</Button>
+              <Button onClick={() => setSortKeys(s => !s)} size="sm" variant={sortKeys ? 'default' : 'outline'} className="h-7 px-2 text-xs">{sortKeys ? 'Unsort Keys' : 'Sort Keys'}</Button>
               <div className="flex items-center gap-1 text-[10px] ml-1">
                 <span className="text-muted-foreground">Depth</span>
                 <select
@@ -798,11 +799,13 @@ export function JsonTools() {
                   {[0,1,2,3,4,5,6].map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-            <button
+            <Button
               onClick={() => setPerfMode(p => !p)}
-              className={`rounded border px-2 py-1 text-xs ${perfMode ? 'bg-accent text-accent-foreground' : ''}`}
+              size="sm"
+              variant={perfMode ? 'default' : 'outline'}
+              className="h-7 px-2 text-xs"
               title="Performance mode caps rendered nodes for very large JSON"
-            >{perfMode ? 'Perf On' : 'Perf Off'}</button>
+            >{perfMode ? 'Perf On' : 'Perf Off'}</Button>
             </div>
           ) : null}
         </div>
@@ -818,28 +821,30 @@ export function JsonTools() {
           {search && (
             <>
               <span className="text-muted-foreground">{matchPaths.length} match{matchPaths.length!==1 && 'es'}</span>
-              <button disabled={!matchPaths.length} onClick={() => nextMatch(-1)} className="rounded border px-2 py-0.5 disabled:opacity-40">Prev</button>
-              <button disabled={!matchPaths.length} onClick={() => nextMatch(1)} className="rounded border px-2 py-0.5 disabled:opacity-40">Next</button>
+              <Button disabled={!matchPaths.length} onClick={() => nextMatch(-1)} size="sm" variant="outline" className="h-7 px-2 text-xs">Prev</Button>
+              <Button disabled={!matchPaths.length} onClick={() => nextMatch(1)} size="sm" variant="outline" className="h-7 px-2 text-xs">Next</Button>
               {matchPaths.length > 0 && <span className="text-muted-foreground">{activeMatchIndex+1}/{matchPaths.length}</span>}
             </>
           )}
-          <button
+          <Button
             onClick={() => setSearchMode(m => m === 'plain' ? 'regex' : 'plain')}
-            className={`rounded border px-2 py-0.5 ${searchMode === 'regex' ? 'bg-accent text-accent-foreground' : ''}`}
-          >{searchMode === 'regex' ? 'Regex' : 'Plain'}</button>
+            size="sm"
+            variant={searchMode === 'regex' ? 'default' : 'outline'}
+            className="h-7 px-2 text-xs"
+          >{searchMode === 'regex' ? 'Regex' : 'Plain'}</Button>
           {searchError && <span className="text-red-600 dark:text-red-400 text-[10px]" title={searchError}>Regex Error</span>}
           {selectedPath && (
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground truncate max-w-[180px]" title={selectedPath}>Selected: {selectedPath.replace(/^root\.?/,'')}</span>
-              <button
+              <Button
                 onClick={() => {
                   const pathToCopy = selectedPath.replace(/^root\.?/,'');
                   navigator.clipboard.writeText(pathToCopy || 'root');
                   push({ title: 'Copied', description: 'Path copied to clipboard', variant: 'success'});
                 }}
-                className="rounded border px-2 py-0.5"
-              >Copy Path</button>
-              <button
+                size="sm" variant="outline" className="h-7 px-2 text-xs"
+              >Copy Path</Button>
+              <Button
                 onClick={() => {
                   // Convert to JSON Pointer (RFC6901)
                   // root.a.b.0 -> /a/b/0
@@ -853,9 +858,9 @@ export function JsonTools() {
                   navigator.clipboard.writeText(pointer);
                   push({ title: 'Copied', description: 'JSON Pointer copied', variant: 'success'});
                 }}
-                className="rounded border px-2 py-0.5"
-              >Copy Pointer</button>
-              <button
+                size="sm" variant="outline" className="h-7 px-2 text-xs"
+              >Copy Pointer</Button>
+              <Button
                 onClick={() => {
                   if (!result?.parsed) return;
                   const parts = selectedPath.split('.').slice(1); // remove synthetic root
@@ -878,8 +883,8 @@ export function JsonTools() {
                   navigator.clipboard.writeText(valStr);
                   push({ title: 'Copied', description: 'Value copied to clipboard', variant: 'success'});
                 }}
-                className="rounded border px-2 py-0.5"
-              >Copy Value</button>
+                size="sm" variant="outline" className="h-7 px-2 text-xs"
+              >Copy Value</Button>
             </div>
           )}
         </div>

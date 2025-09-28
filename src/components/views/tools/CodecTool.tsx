@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback } from 'react';
 import { useToast } from '@/components/providers/toast-provider';
+import { Button } from '@/components/ui/button';
 
 type Mode = 'base64' | 'url';
 
@@ -95,28 +96,10 @@ export function CodecTool() {
             <option value="encode">Encode</option>
             <option value="decode">Decode</option>
           </select>
-          <button
-            onClick={run}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:opacity-90"
-            type="button"
-          >Run</button>
-          <button
-            onClick={swap}
-            disabled={!result.output}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-            type="button"
-          >Swap</button>
-          <button
-            onClick={clearAll}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium"
-            type="button"
-          >Clear</button>
-          <button
-            onClick={copyOutput}
-            disabled={!result.output}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-            type="button"
-          >Copy</button>
+          <Button onClick={run} type="button" size="sm">Run</Button>
+          <Button onClick={swap} disabled={!result.output} type="button" size="sm" variant="outline">Swap</Button>
+          <Button onClick={clearAll} type="button" size="sm" variant="secondary">Clear</Button>
+          <Button onClick={copyOutput} disabled={!result.output} type="button" size="sm" variant="outline">Copy</Button>
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
