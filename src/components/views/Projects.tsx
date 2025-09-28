@@ -170,6 +170,9 @@ export function Projects() {
             Selected engineering work, experiments, and tools—continuously
             synced from GitHub into Convex storage.
           </p>
+          {isOwner && projects && (
+            <p className="text-[10px] text-muted-foreground">debug: total={projects.length} rest={rest.length} page={page} showing={pagedRest.length}</p>
+          )}
           {isOwner && (
             <div className="pt-1 flex flex-col items-center gap-2">
               <button
