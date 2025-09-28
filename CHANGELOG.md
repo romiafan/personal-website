@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [0.2.2] - 2025-09-28
+
+### Initial Added
+
+- API: `/api/health` endpoint returns `{ status, buildTime, uptimeMs }` for basic monitoring.
+
+### Docs
+
+- README: Documented resilient SheetJS loader, always-on Clerk provider, and health endpoint.
+- Roadmap: Marked workbook export issues (#22, #23) as done; added issues for SheetJS hardening and health check.
+
+### Internal Notes
+
+- Synchronized `package.json` version with existing 0.2.1 tag (prep for patch sequence toward 0.2.2).
+
 ## [0.2.1] - 2025-09-28
 
 ### Fixed

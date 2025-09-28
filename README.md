@@ -11,7 +11,7 @@ A modern personal site + utilities hub built with a strict TypeScript-first + Ap
 | Styling         | Tailwind CSS v4, shadcn/ui (New York theme, slate palette)  |
 | Animations      | Framer Motion (centralized variants in `src/lib/motion.ts`) |
 | Backend (data)  | Convex (real-time queries + mutations)                      |
-| Auth            | Clerk (conditionally enabled)                               |
+| Auth            | Clerk (always-on provider)                                   |
 | Package Manager | pnpm 9 (pinned via `packageManager`)                        |
 | Icons           | lucide-react                                                |
 | Deployment      | Vercel                                                      |
@@ -54,7 +54,7 @@ Then visit: <http://localhost:3000>
 - Convex schema: `projects`, `messages`
 - Projects list via `useQuery(api.projects.get)` (loading + empty states)
 - Contact form posting through `messages.send` mutation
-- Conditional `ClerkProvider` (site builds without env keys)
+- Always-on `ClerkProvider` (prevents prerender hook errors)
 - `/toolkit` protected route scaffold (auth required, placeholder cards)
 - Strict TypeScript + ESLint clean build
 - Central motion variants file to keep consistency
@@ -155,6 +155,13 @@ Planned / Backlog:
 - Bulk multi-node JSON edits & find/replace
 - Shareable permalink state for JSON tool configurations
 <!-- XLSX export implemented via Issue #23 -->
+### Resilient XLSX Loading
+
+The XLSX export uses a resilient dynamic loader that attempts multiple entrypoints (`xlsx`, `xlsx/xlsx.mjs`, `xlsx/dist/xlsx.full.min.js`) with a retry + idle prefetch to mitigate transient chunk load failures in some production edge cases. Ambient module declarations ensure strict typing.
+
+### Health Check Endpoint
+
+`/api/health` returns JSON `{ status: "ok", buildTime, uptimeMs }` for basic uptime monitoring and can be extended later with dependency status.
 
 All toolkit components live under `src/components/views/tools/` and are loaded only inside the protected `/toolkit` route to keep public bundle size lean.
 

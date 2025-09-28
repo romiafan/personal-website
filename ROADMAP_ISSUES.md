@@ -23,8 +23,10 @@
 | P3       | #19   | JSON Tools Virtualized Rendering                                                                             |
 | P3       | #20   | JSON Tools Find & Replace                                                                                    |
 | P3       | #21   | JSON Tools Persist History                                                                                   |
-| P2       | #22   | JSON Tools Multi-Sheet Workbook Export (CSV ZIP)                                                             |
-| P2       | #23   | JSON Tools Multi-Sheet XLSX Export (dynamic sheetjs, union-of-keys columns, safe sheet names)                |
+| P2 (Done)| #22   | JSON Tools Multi-Sheet Workbook Export (CSV ZIP)                                                             |
+| P2 (Done)| #23   | JSON Tools Multi-Sheet XLSX Export (dynamic sheetjs, union-of-keys columns, safe sheet names)                |
+| P2       | #24   | Resilient SheetJS import fallback + idle prefetch                                                            |
+| P3       | #25   | Health check endpoint `/api/health`                                                                          |
 
 ## Details
 
