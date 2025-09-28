@@ -11,7 +11,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "debug:github": "node scripts/github-debug.mjs romiafan"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.33.0",

@@ -108,8 +108,18 @@ export const syncViaGithub = action({
       headers.Authorization = `Bearer ${token}`;
       headers['X-GitHub-Api-Version'] = '2022-11-28';
     }
+    // Fetch strategy:
+    // 1. If token present: use authenticated /user/repos to include owner, collaborator, org repos (public + private) then filter.
+    // 2. Else fallback to public only /users/:username/repos.
+    let endpoint: string;
+    if (token) {
+      // affiliation can be owner,collaborator,organization_member; pick owner + member for now to avoid huge lists.
+      endpoint = `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,organization_member`;
+    } else {
+      endpoint = `https://api.github.com/users/${username}/repos?per_page=100&sort=updated`;
+    }
 
-    const res = await fetch(`https://api.github.com/users/${username}/repos?per_page=100&sort=updated`, { headers });
+    const res = await fetch(endpoint, { headers });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`GitHub fetch failed: ${res.status} ${text.slice(0,200)}`);
@@ -117,8 +127,9 @@ export const syncViaGithub = action({
     const raw = await res.json();
     if (!Array.isArray(raw)) throw new Error('Unexpected GitHub response');
 
-    // Normalize
-    const projects = raw.map((r: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Normalize (limit to repos owned by the username OR explicitly allow when token path used)
+    const normalized = raw.map((r: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      owner: r.owner?.login || undefined,
       name: r.name,
       description: r.description ?? undefined,
       html_url: r.html_url,
@@ -133,11 +144,34 @@ export const syncViaGithub = action({
       fork: !!r.fork,
     }));
 
-    if (projects.length > 300) {
-      throw new Error('Too many repositories returned (limit 300)');
+    // Keep only repos actually owned by the specified username.
+    const owned = normalized.filter(p => p.owner === username);
+
+    // Exclude private repos from public listing.
+    const projects = owned.filter(p => !p.private).map(p => ({
+      name: p.name,
+      description: p.description,
+      html_url: p.html_url,
+      homepage: p.homepage,
+      language: p.language,
+      topics: p.topics,
+      stargazers_count: p.stargazers_count,
+      forks_count: p.forks_count,
+      updated_at: p.updated_at,
+      created_at: p.created_at,
+      private: p.private,
+      fork: p.fork,
+    }));
+
+    if (projects.length > 300) throw new Error('Too many repositories returned (limit 300)');
+
+    // Safety guard against accidental truncation: if existing > 5 and new <= 1, abort.
+  // Actions cannot access db directly; use runQuery.
+  const existing = await ctx.runQuery(api.projects.get);
+    if (existing.length > 5 && projects.length <= 1) {
+      throw new Error(`Aborting sync: suspicious low repo count (existing ${existing.length} -> new ${projects.length}).`);
     }
 
-    // Reuse existing mutation to persist normalized list atomically
     const result = await ctx.runMutation(api.projects.syncFromGitHub, { username, projects });
     return result as { count: number; success?: boolean };
   }
