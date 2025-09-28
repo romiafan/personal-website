@@ -100,6 +100,18 @@ export function Projects() {
     rest = sorted.slice(1);
   }
 
+  // Pagination (client-side) for 'rest' list
+  const PAGE_SIZE = 6;
+  const [page, setPage] = React.useState(1);
+  const totalPages = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
+  React.useEffect(() => {
+    // Reset to first page if rest length shrinks below current page start
+    if ((page - 1) * PAGE_SIZE >= rest.length && page > 1) {
+      setPage(1);
+    }
+  }, [rest.length, page]);
+  const pagedRest = rest.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <Section id="projects" variant="wide" className="space-y-16">
       {/* JSON-LD structured data for the featured project (SEO) */}
@@ -273,7 +285,7 @@ export function Projects() {
           )}
           {!loading && rest.length > 0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {rest.map((project) => (
+              {pagedRest.map((project) => (
                 <ProjectCard
                   key={project._id}
                   id={project._id}
@@ -286,6 +298,29 @@ export function Projects() {
                   updated_at={project.updated_at}
                 />
               ))}
+            </div>
+          )}
+          {!loading && rest.length > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 text-xs rounded border border-border/60 bg-card/40 disabled:opacity-40 hover:enabled:bg-card/60"
+                aria-label="Previous page"
+              >
+                Prev
+              </button>
+              <span className="text-xs text-muted-foreground">
+                Page {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 text-xs rounded border border-border/60 bg-card/40 disabled:opacity-40 hover:enabled:bg-card/60"
+                aria-label="Next page"
+              >
+                Next
+              </button>
             </div>
           )}
         </div>

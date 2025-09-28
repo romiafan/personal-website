@@ -144,11 +144,11 @@ export const syncViaGithub = action({
       fork: !!r.fork,
     }));
 
-    // Keep only repos actually owned by the specified username.
-    const owned = normalized.filter(p => p.owner === username);
+    // Keep only repos actually owned by the specified username (case-insensitive).
+    const owned = normalized.filter(p => (p.owner || '').toLowerCase() === username.toLowerCase());
 
     // Exclude private repos from public listing.
-    const projects = owned.filter(p => !p.private).map(p => ({
+    let projects = owned.filter(p => !p.private).map(p => ({
       name: p.name,
       description: p.description,
       html_url: p.html_url,
@@ -162,6 +162,27 @@ export const syncViaGithub = action({
       private: p.private,
       fork: p.fork,
     }));
+
+    // Fallback: if suspiciously low count (<=1) but raw normalized has more public repos, include those
+    if (projects.length <= 1) {
+      const publicNonPrivate = normalized.filter(p => !p.private).map(p => ({
+        name: p.name,
+        description: p.description,
+        html_url: p.html_url,
+        homepage: p.homepage,
+        language: p.language,
+        topics: p.topics,
+        stargazers_count: p.stargazers_count,
+        forks_count: p.forks_count,
+        updated_at: p.updated_at,
+        created_at: p.created_at,
+        private: p.private,
+        fork: p.fork,
+      }));
+      if (publicNonPrivate.length > projects.length) {
+        projects = publicNonPrivate;
+      }
+    }
 
     if (projects.length > 300) throw new Error('Too many repositories returned (limit 300)');
 
