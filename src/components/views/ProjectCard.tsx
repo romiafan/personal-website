@@ -33,6 +33,9 @@ export function ProjectCard({
     <motion.div
       layout
       variants={fadeInUp}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.2 }}
       key={id}
       className={cn(
         "flex flex-col justify-between rounded-lg border bg-background p-4 text-left hover:shadow-md transition-shadow",

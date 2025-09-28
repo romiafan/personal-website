@@ -111,6 +111,11 @@ export function Projects() {
     }
   }, [rest.length, page]);
   const pagedRest = rest.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  React.useEffect(() => {
+    if (!loading && rest.length > 0 && pagedRest.length === 0) {
+      setPage(1);
+    }
+  }, [loading, rest.length, pagedRest.length]);
 
   return (
     <Section id="projects" variant="wide" className="space-y-16">
@@ -170,9 +175,7 @@ export function Projects() {
             Selected engineering work, experiments, and tools—continuously
             synced from GitHub into Convex storage.
           </p>
-          {isOwner && projects && (
-            <p className="text-[10px] text-muted-foreground">debug: total={projects.length} rest={rest.length} page={page} showing={pagedRest.length}</p>
-          )}
+          {/* Debug line removed after fix; can re-enable if needed */}
           {isOwner && (
             <div className="pt-1 flex flex-col items-center gap-2">
               <button
@@ -301,6 +304,11 @@ export function Projects() {
                   updated_at={project.updated_at}
                 />
               ))}
+            </div>
+          )}
+          {!loading && rest.length > 0 && pagedRest.length === 0 && (
+            <div className="text-xs text-muted-foreground border rounded p-4">
+              No projects on this page. Resetting…
             </div>
           )}
           {!loading && rest.length > PAGE_SIZE && (
