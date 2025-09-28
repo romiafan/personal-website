@@ -61,13 +61,15 @@ Then visit: <http://localhost:3000>
 
 ## 🔜 In Progress / Planned
 
-- UI trigger for `projects.syncFromGitHub`
-- Replace temporary `@ts-expect-error` after Convex types regenerate
-- JSON Formatter (pretty + error highlight)
-- Color Picker / Converter (HEX ⇄ RGB ⇄ HSL)
-- Lorem Ipsum generator
-- Owner-only guard (env-driven user id) for toolkit
-- Optional blog / MDX content
+Tracked issues (see `ROADMAP_ISSUES.md` for full table):
+
+- (#24) Accessibility: Reduced Motion Variant Pruning
+- (#25) Theming: Interactive Theme Token Panel
+- (#26) Performance: Motion Variant Tree-Shaking
+- (#27) Content: Blog Route Group (MDX) Skeleton
+- (#28) Contact: Basic Rate Limiting
+
+Recently completed: skip link + initial reduced-motion baseline (CSS)
 
 ## 🧩 Convex Integration & Types
 
@@ -183,6 +185,82 @@ Dark/light theme handled by `next-themes` (CSS variables, not class toggling). A
 
 Keep animations subtle (performance & accessibility). Avoid excessive parallax or long-running infinite loops.
 
+### Layout System & Section Wrapper
+
+The homepage and future marketing pages use a `Section` component that standardizes vertical rhythm and width tiers.
+
+Variants:
+
+| Variant   | Max Width       | Use Case                                   |
+| --------- | --------------- | ------------------------------------------ |
+| `prose`   | ~65ch           | Text-heavy content blocks (About, Contact) |
+| `default` | 80rem (≈1280px) | General content / mixed media              |
+| `wide`    | 1400px          | Hero / visually rich or grids              |
+
+Vertical spacing: `py-[clamp(4rem,8vw,8rem)]` applied uniformly so large screens get breathing room without wasting space on mobile.
+
+Subtle separators: Each section has a faint top border (`border-t border-border/40`) except the first—creating structure without heavy dividers.
+
+Usage example:
+
+```tsx
+import { Section } from "@/components/layout/Section";
+
+export function About() {
+  return (
+    <Section id="about" variant="prose">
+      <h2 className="text-3xl font-semibold tracking-tight mb-6">About</h2>
+      <p className="text-muted-foreground leading-relaxed">
+        I craft performant full‑stack products with an emphasis on accessible,
+        resilient interfaces.
+      </p>
+    </Section>
+  );
+}
+```
+
+### Dark Theme (Dracula-Inspired)
+
+The dark palette approximates Dracula colors using OKLCH for perceptual consistency: purple primary, balanced foreground, softened secondary surfaces, subtle noise + radial gradients for depth. Light theme remains minimal for clarity.
+
+### Background Layers
+
+Two large radial gradients plus a procedural noise overlay (`radial-gradient` dots via CSS) are injected in `layout.tsx`. This keeps the page visually engaging while avoiding large image assets. Opacity is tuned separately for light/dark.
+
+### Motion Accessibility
+
+Motion is concentrated in entrance transitions (opacity + small translate). For users with `prefers-reduced-motion: reduce`, consider future enhancement to neutralize transforms entirely (current usage already low-impact).
+
+### Forms & Surfaces
+
+Interactive surfaces (cards, form panels) use translucent `bg-card/40` + `backdrop-blur` to layer over gradient backgrounds, reinforcing depth without increasing contrast fatigue. Focus rings use `ring-primary/40` for consistency.
+
+### Future Enhancements
+
+Core accessibility & theming:
+
+- Additional reduced-motion variant pruning (already partially implemented)
+- Theme token live preview panel (visualize OKLCH adjustments)
+- Skip link (implemented) & focus outline audit in dark mode
+
+Performance & polish:
+
+- Motion variant tree-shaking (import-on-demand)
+- Conditional radial gradient intensity based on scroll depth
+- Pre-render critical section skeletons for faster FCP
+
+Content & structure:
+
+- Add blog/notes route group with MDX & RSC streaming
+- Expand Projects with tag filtering & pagination via Convex
+- Case studies with light/dark adaptive diagrams
+
+Tooling & DX:
+
+- Storybook or Ladle for isolated component review (subset only)
+- Visual regression tests on key sections (Playwright)
+- Lint rule to enforce Section wrapper for top-level homepage sections
+
 ## 🔧 Environment Variables
 
 Create `.env.local`:
@@ -238,7 +316,140 @@ Personal project – not licensed for redistribution.
 
 Built with ❤️ using Next.js, TypeScript, Convex, and modern web tooling.
 
-## 🔐 Toolkit Access & Owner Setup
+## 🛡️ Security & Token Scope
+
+- `.env.local` (and any `.env*`) are already ignored via `.gitignore` (pattern `.env*`). Do not commit secrets.
+- `GITHUB_TOKEN` should have the minimal scope needed (typically `public_repo` or read-only repo scope). Avoid full `repo` if not required.
+- Consider rotating the token periodically or using a fine-grained PAT restricted to public repos if possible.
+
+## 🚢 Production Deployment Checklist
+
+Before first deploy (e.g. to Vercel):
+
+1. Set the following env vars in the hosting platform:
+
+- `NEXT_PUBLIC_CONVEX_URL`
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `CLERK_JWT_ISSUER`
+- `NEXT_PUBLIC_OWNER_USER_ID`
+- `GITHUB_TOKEN`
+
+1. Deploy the site.
+1. Sign in as the owner and trigger a projects sync.
+1. Verify:
+
+- Sync succeeds (toast shows imported repo count)
+- `Last sync` line updates with relative time
+- Convex dashboard shows function invocation with your Clerk user id
+
+1. Test visiting `/toolkit` while signed out (should redirect or hide tools).
+1. Test visiting `/toolkit` with a non-owner account (should not expose owner-only actions like sync).
+
+Post-deploy hardening (optional):
+
+- Enable automatic project sync via Convex cron (see below) to reduce manual operations.
+- Add monitoring (e.g. health check endpoint) to uptime service.
+
+## ⏱️ Future: Automated Daily Sync (Scheduling)
+
+Convex supports scheduled tasks (cron). A future enhancement can trigger `syncViaGithub` action daily:
+
+Pseudo-config (conceptual example – adapt when enabling cron):
+
+```ts
+// convex/crons.ts
+import { cronJobs } from "convex/server";
+import { api } from "./_generated/api";
+
+const crons = cronJobs();
+crons.daily("daily github sync", { hourUTC: 2, minuteUTC: 0 }, async (ctx) => {
+  await ctx.runAction(api.projects.syncViaGithub, { username: "romiafan" });
+});
+
+export default crons;
+```
+
+Then remove or hide the manual sync button for production visitors (keeping a hidden owner override if desired).
+
+## � Clerk + Convex Authentication (JWT Template)
+
+Convex needs a Clerk-issued JWT to authenticate users. The Convex <-> Clerk bridge looks for a JWT template named `convex`.
+
+### 1. Create Clerk JWT Template
+
+In the Clerk dashboard:
+
+1. Navigate: Application → JWT Templates → New Template
+2. Name: `convex` (must match exactly)
+3. Algorithm: `RS256`
+4. (Optional) Custom claims – minimal example:
+
+   ```json
+   {
+     "sub": "{{user.id}}",
+     "email": "{{user.primary_email_address.email_address}}"
+   }
+   ```
+
+5. Save & Enable.
+
+### 2. Configure Issuer Env Var
+
+Add to `.env.local`:
+
+```bash
+CLERK_JWT_ISSUER=https://YOUR_SUBDOMAIN.clerk.accounts.dev
+```
+
+Use the exact issuer shown in the template details page (it ends with `.accounts.dev` for test or your production domain).
+
+### 3. Convex Auth Config
+
+`convex/auth.config.ts` lists providers:
+
+```ts
+export default {
+  providers: [
+    { domain: process.env.CLERK_JWT_ISSUER || "", applicationID: "convex" },
+  ].filter((p) => p.domain),
+};
+```
+
+If the issuer is missing, the provider list is empty and authentication will fail (you'll see `Failed to authenticate: "No auth provider found matching the given token"`).
+
+### 4. Client Provider Bridge
+
+`ConvexProviderWithClerk` (in `convex-provider.tsx`) passes Clerk `useAuth()` to Convex so requests include a fresh JWT.
+
+### 5. Common Errors & Fixes
+
+| Error Message                                            | Cause                                | Fix                                           |
+| -------------------------------------------------------- | ------------------------------------ | --------------------------------------------- |
+| `No JWT template exists with name: convex`               | Template missing                     | Create template named `convex`                |
+| `No auth provider found matching the given token`        | Missing / wrong `CLERK_JWT_ISSUER`   | Set correct issuer env var                    |
+| `Unauthorized: sign in required` in Convex function logs | Token not sent / invalid             | Ensure template enabled & provider configured |
+| Owner-only sync button says not owner though signed in   | `NEXT_PUBLIC_OWNER_USER_ID` mismatch | Copy correct Clerk user id                    |
+| Works locally but fails in production                    | Prod env vars incomplete             | Replicate `.env.local` to Vercel              |
+
+### 6. Verification Checklist
+
+After setup, open DevTools Network tab:
+
+- Trigger a Convex query/mutation
+- Request should include `Authorization: Bearer <jwt>` header (or WebSocket auth message)
+- The Convex dashboard’s function logs should show your user subject (Clerk user id) in audit entries.
+
+### 7. Security Notes
+
+- Do not expose `CLERK_SECRET_KEY` client-side; only `NEXT_PUBLIC_*` keys are shipped to browser.
+- The JWT template controls which claims reach Convex—keep it minimal.
+- Rotate keys or disable template if compromised.
+
+---
+
+## �🔐 Toolkit Access & Owner Setup
 
 The `/toolkit` route is strictly owner-gated when Clerk is configured. Without Clerk env vars it hard-redirects to `/` (never publicly exposed).
 

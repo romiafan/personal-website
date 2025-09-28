@@ -18,6 +18,12 @@ export function ConvexClientProvider({ children }: ConvexClientProviderProps) {
   if (!convex) {
     return <>{children}</>
   }
+
+  if (process.env.NODE_ENV === 'development') {
+    if (!process.env.CLERK_JWT_ISSUER) {
+      console.warn('[convex] Missing CLERK_JWT_ISSUER env var. Add it so convex/auth.config.ts can register your Clerk issuer.');
+    }
+  }
   
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>

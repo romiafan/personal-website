@@ -78,37 +78,42 @@
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  /* Dracula-inspired dark palette */
+  /* Base Dracula colors for reference:
+     Background #282a36, CurrentLine #44475a, Foreground #f8f8f2,
+     Comment #6272a4, Cyan #8be9fd, Green #50fa7b, Orange #ffb86c,
+     Pink #ff79c6, Purple #bd93f9, Red #ff5555, Yellow #f1fa8c */
+  --background: oklch(29.5% 0.031 276); /* #282a36 approx */
+  --foreground: oklch(97% 0.01 110); /* near #f8f8f2 */
+  --card: oklch(33% 0.03 276); /* slightly lighter than bg */
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(71% 0.18 308); /* Purple (#bd93f9) */
+  --primary-foreground: oklch(19% 0.04 276); /* Dark bg contrast */
+  --secondary: oklch(40% 0.04 276); /* current line-ish */
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(40% 0.04 276);
+  --muted-foreground: oklch(72% 0.07 260); /* comment tone */
+  --accent: oklch(71% 0.18 308); /* reuse purple for consistency */
+  --accent-foreground: var(--primary-foreground);
+  --destructive: oklch(63% 0.24 27); /* #ff5555 */
+  --border: oklch(47% 0.05 276 / 55%);
+  --input: oklch(47% 0.05 276 / 55%);
+  --ring: oklch(71% 0.18 308 / 60%);
+  --chart-1: oklch(63% 0.24 27); /* red */
+  --chart-2: oklch(78% 0.17 184); /* cyan-ish */
+  --chart-3: oklch(71% 0.18 308); /* purple */
+  --chart-4: oklch(80% 0.16 100); /* yellow approximated */
+  --chart-5: oklch(70% 0.19 30); /* orange */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @layer base {
@@ -116,6 +121,25 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at 30% 20%, color-mix(in oklab, var(--primary) 25%, transparent) 0, transparent 60%),
+      radial-gradient(circle at 75% 70%, color-mix(in oklab, var(--accent) 20%, transparent) 0, transparent 55%);
+    background-attachment: fixed;
+  }
+}
+
+/* Reduce motion preferences: limit parallax/fixed backgrounds & transition intensity */
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-attachment: scroll; /* Avoid potential jank */
+  }
+  /* Framer Motion fallback: neutralize transforms when possible */
+  [data-reduced-motion] *,
+  .reduce-motion *,
+  body.reduce-motion * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
