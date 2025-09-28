@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useAction } from "convex/react";
+import * as React from 'react';
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { motion } from "framer-motion";
@@ -27,72 +28,45 @@ interface ProjectDoc {
   fork: boolean;
 }
 
-interface GitHubRepo {
-  name: string;
-  description: string | null;
-  html_url: string;
-  homepage: string | null;
-  language: string | null;
-  topics?: string[];
-  stargazers_count: number;
-  forks_count: number;
-  updated_at: string;
-  created_at: string;
-  private: boolean;
-  fork: boolean;
-}
 
 export function Projects() {
   const projects = useQuery(api.projects.get);
-  const sync = useMutation(api.projects.syncFromGitHub);
+  const lastSync = useQuery(api.projects.getLastSync);
+  const syncViaGithub = useAction(api.projects.syncViaGithub);
   const ownerId = process.env.NEXT_PUBLIC_OWNER_USER_ID; // Exposed via build-time
   const { push } = useToast();
   const { user } = useUser();
 
   const isOwner = !!ownerId && user?.id === ownerId;
 
+  const [syncing, setSyncing] = React.useState(false);
   async function handleSync() {
-    // Placeholder: client-side fetch of public GitHub repos (unauthenticated)
+    if (syncing) return;
+    setSyncing(true);
     try {
-  const username = "romiafan"; // Hard-coded for now – future: derive from config or metadata
-  const res = await fetch(`/api/github/repos?username=${username}`);
-      if (!res.ok) throw new Error("GitHub API error");
-  const data = await res.json();
-
-      // Map to mutation shape
-  const mapped = (data.repos as GitHubRepo[]).map((r) => ({
-        name: r.name,
-        description: r.description ?? undefined,
-        html_url: r.html_url,
-        homepage: r.homepage || undefined,
-        language: r.language || undefined,
-        topics: r.topics ?? [],
-        stargazers_count: r.stargazers_count ?? 0,
-        forks_count: r.forks_count ?? 0,
-        updated_at: r.updated_at,
-        created_at: r.created_at,
-        private: r.private,
-        fork: r.fork,
-      }));
-
-      await sync({ username: username, projects: mapped });
+      const username = "romiafan"; // TODO: externalize to config/constant
+      const result = await syncViaGithub({ username });
       push({
         title: 'Sync Complete',
-        description: `Imported ${mapped.length} repositories`,
+        description: `Imported ${result?.count ?? 0} repositories`,
         variant: 'success'
       });
     } catch (e: unknown) {
-      let message = e instanceof Error ? e.message : "Unknown error";
+      let message = e instanceof Error ? e.message : 'Unknown error';
       if (/Unauthorized/i.test(message)) {
         message = 'You must be signed in as the site owner to sync projects.';
       } else if (/Forbidden: not owner/i.test(message)) {
         message = 'Only the configured owner account can sync.';
+      } else if (/GitHub fetch failed/i.test(message)) {
+        message = 'GitHub API request failed. Check token/rate limits.';
       }
       push({
         title: 'Sync Failed',
         description: message,
         variant: 'error'
       });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -153,13 +127,17 @@ export function Projects() {
             <h2 className="text-3xl font-bold tracking-tight sm:text-5xl">Projects</h2>
             <p className="text-gray-500 md:text-lg dark:text-gray-400 max-w-2xl">Selected engineering work, experiments, and tools. Continuously synced from GitHub into Convex storage.</p>
             {isOwner && (
-              <div className="pt-1">
+              <div className="pt-1 flex flex-col items-center gap-2">
                 <button
                   onClick={handleSync}
-                  className="inline-flex items-center gap-1 rounded-md border bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 transition-colors"
+                  disabled={syncing}
+                  className="inline-flex items-center gap-1 rounded-md border bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors disabled:opacity-60 hover:enabled:opacity-90"
                 >
-                  <span>Refresh from GitHub</span>
+                  <span>{syncing ? 'Syncing…' : 'Refresh from GitHub'}</span>
                 </button>
+                {lastSync && (
+                  <span className="text-xs text-muted-foreground">Last sync: {new Date(lastSync.created_at).toLocaleString()} ({lastSync.count} repos)</span>
+                )}
               </div>
             )}
           </motion.div>
