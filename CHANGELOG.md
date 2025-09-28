@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [0.2.1] - 2025-09-28
+
+### Fixed
+
+- Auth: Always wrap app with `ClerkProvider` to prevent prerender build failures when `useUser()` is referenced (resolves intermittent `_not-found` prerender error when env var missing).
+- JSON Tools: Hardened SheetJS dynamic import with multi-path fallback (`xlsx`, `xlsx/xlsx.mjs`, `xlsx/dist/xlsx.full.min.js`), retry logic, idle prefetch, and typed ambient module declarations to mitigate transient chunk load failures in production.
+
+### Internal Changes
+
+- Added ambient TypeScript declarations for alternate `xlsx` entrypoints.
+- Refactored XLSX loader to cache resolved module and eliminate `any` usage except for a confined normalization cast.
+
 ## [0.2.0] - 2025-09-28
 
 ### Initial
