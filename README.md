@@ -131,22 +131,22 @@ This keeps auth overhead minimal—only `/toolkit` runs through middleware. With
 
 Implemented tools (owner-gated):
 
-| Tool | Key Features |
-| ---- | ------------ |
-| JSON Tools | Pretty format, error feedback, minify, JSON → CSV, tree/table views, search (plain + regex) with highlighting & navigation, key sorting, depth-based collapse, performance mode (node cap), copy path/value, JSON Pointer copy (RFC6901), inline primitive editing (double-click), undo/redo history (50 states) |
-| UUID Generator | v4 & v7 generation, configurable count, per-item & bulk copy |
-| Timestamp Converter | Auto-detect input (UNIX s / ms / ISO), outputs ISO, locale, UNIX(s/ms), relative time |
-| Base64 / URL Encoder-Decoder | Two-direction encode/decode with error handling, UTF‑8 safe |
-| Regex Tester | Pattern + flags, safe execution guard, match highlighting & indices |
-| JSON → TS Interface | Infers nested interfaces, optional props, array element union inference |
-| JWT Decoder | Base64url decode header/payload, structured claims view, validation errors, security disclaimer |
-| Color Utility | HEX → RGB/HSL conversion, validation & preview swatch |
-| Color Palette Extractor | Image upload → dominant palette (5–8 colors), copy hex, skips transparent pixels |
-| Text Diff Tool | Line-level diff (LCS), add/del/context styling, copy unified diff |
-| Markdown Preview | Live sanitized preview (headings, lists, code blocks, links) with HTML copy |
-| Slug / Case Converter | slug, camelCase, PascalCase, snake_case, CONSTANT_CASE, Title, kebab-case; diacritic stripping |
-| Lorem Ipsum Generator | Paragraph count (1–10), copy output |
-| Audit Log Viewer | Paged Convex query, action/status filters, error highlighting |
+| Tool                         | Key Features                                                                                                                                                                                                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JSON Tools                   | Pretty format, error feedback, minify, JSON → CSV, multi-sheet workbook detection & ZIP export, tree/table views, search (plain + regex) with highlighting & navigation, key sorting, depth-based collapse, performance mode (node cap), copy path/value, JSON Pointer copy (RFC6901), inline primitive editing (double-click), undo/redo history (50 states) |
+| UUID Generator               | v4 & v7 generation, configurable count, per-item & bulk copy                                                                                                                                                                                                                                                     |
+| Timestamp Converter          | Auto-detect input (UNIX s / ms / ISO), outputs ISO, locale, UNIX(s/ms), relative time                                                                                                                                                                                                                            |
+| Base64 / URL Encoder-Decoder | Two-direction encode/decode with error handling, UTF‑8 safe                                                                                                                                                                                                                                                      |
+| Regex Tester                 | Pattern + flags, safe execution guard, match highlighting & indices                                                                                                                                                                                                                                              |
+| JSON → TS Interface          | Infers nested interfaces, optional props, array element union inference                                                                                                                                                                                                                                          |
+| JWT Decoder                  | Base64url decode header/payload, structured claims view, validation errors, security disclaimer                                                                                                                                                                                                                  |
+| Color Utility                | HEX → RGB/HSL conversion, validation & preview swatch                                                                                                                                                                                                                                                            |
+| Color Palette Extractor      | Image upload → dominant palette (5–8 colors), copy hex, skips transparent pixels                                                                                                                                                                                                                                 |
+| Text Diff Tool               | Line-level diff (LCS), add/del/context styling, copy unified diff                                                                                                                                                                                                                                                |
+| Markdown Preview             | Live sanitized preview (headings, lists, code blocks, links) with HTML copy                                                                                                                                                                                                                                      |
+| Slug / Case Converter        | slug, camelCase, PascalCase, snake_case, CONSTANT_CASE, Title, kebab-case; diacritic stripping                                                                                                                                                                                                                   |
+| Lorem Ipsum Generator        | Paragraph count (1–10), copy output                                                                                                                                                                                                                                                                              |
+| Audit Log Viewer             | Paged Convex query, action/status filters, error highlighting                                                                                                                                                                                                                                                    |
 
 Planned / Backlog:
 
@@ -154,6 +154,7 @@ Planned / Backlog:
 - Undo/redo persistence across sessions
 - Bulk multi-node JSON edits & find/replace
 - Shareable permalink state for JSON tool configurations
+- Optional XLSX multi-sheet export (follow-up to Issue #22)
 
 All toolkit components live under `src/components/views/tools/` and are loaded only inside the protected `/toolkit` route to keep public bundle size lean.
 

@@ -205,6 +205,80 @@ export function JsonTools() {
     }
   }
 
+  // Workbook detection & multi-sheet export (Issue #22)
+  interface Sheet { name: string; data: unknown; }
+
+  const workbookSheets = useMemo(() => {
+    try {
+      if (!input.trim()) return null;
+      const parsed = JSON.parse(input);
+      const detect = (root: unknown): Sheet[] | null => {
+        if (root && typeof root === 'object' && !Array.isArray(root)) {
+          const obj = root as Record<string, unknown>;
+          const container = (Array.isArray(obj.sheets) ? obj.sheets : Array.isArray(obj.workbook) ? obj.workbook : null) as unknown[] | null;
+          if (container) {
+            const sheets: Sheet[] = container.map((s, i) => {
+              if (s && typeof s === 'object') {
+                const so = s as Record<string, unknown>;
+                return { name: typeof so.name === 'string' && so.name.trim() ? so.name : `Sheet${i+1}`, data: so.data };
+              }
+              return { name: `Sheet${i+1}`, data: null };
+            });
+            return sheets.length ? sheets : null;
+          }
+          const entries = Object.entries(obj);
+          if (entries.length && entries.every(([, v]) => Array.isArray(v) && (v as unknown[]).every(r => r && typeof r === 'object' && !Array.isArray(r)))) {
+            return entries.map(([k, v]) => ({ name: k, data: v }));
+          }
+        }
+        return null;
+      };
+      return detect(parsed);
+    } catch {
+      return null;
+    }
+  }, [input]);
+
+  async function exportWorkbookZip() {
+    if (!workbookSheets) return;
+    try {
+      const [{ default: JSZip }] = await Promise.all([
+        import('jszip')
+      ]);
+      const zip = new JSZip();
+      const skipped: string[] = [];
+      let added = 0;
+      for (const sheet of workbookSheets) {
+        const { name, data } = sheet;
+        if (!Array.isArray(data)) { skipped.push(name); continue; }
+        if (!data.every(r => r && typeof r === 'object' && !Array.isArray(r))) { skipped.push(name); continue; }
+        try {
+          const { csv, rows } = jsonToCsv(data);
+          const safe = name.replace(/[^A-Za-z0-9-_]+/g,'_') || `Sheet${added+1}`;
+          zip.file(`${safe}.csv`, csv);
+          added += rows;
+        } catch {
+          skipped.push(name);
+        }
+      }
+      if (added === 0) {
+        push({ title: 'Export Failed', description: 'No valid sheet data to export', variant: 'error' });
+        return;
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `workbook_export_${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      push({ title: 'Workbook Exported', description: `Sheets exported (${added} rows total)${skipped.length ? `; skipped: ${skipped.join(', ')}` : ''}`, variant: 'success' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Workbook export failed';
+      push({ title: 'Export Failed', description: msg, variant: 'error' });
+    }
+  }
+
   function minifyJson() {
     try {
       const parsed = result?.parsed ?? JSON.parse(input);
@@ -549,6 +623,9 @@ export function JsonTools() {
           <button onClick={formatJson} className="rounded-md border px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">Format</button>
           <button onClick={copyFormatted} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Copy</button>
           <button onClick={exportCsv} className="rounded-md border px-3 py-1.5 text-sm font-medium">JSON → CSV</button>
+          {workbookSheets && (
+            <button onClick={exportWorkbookZip} className="rounded-md border px-3 py-1.5 text-sm font-medium" title="Detects multi-sheet workbook patterns and exports each sheet as CSV inside a ZIP">Export Sheets (ZIP)</button>
+          )}
           <button onClick={minifyJson} disabled={!result?.parsed} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Minify</button>
           <button onClick={downloadJson} disabled={!result?.formatted} className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50">Download</button>
           {showTree ? (

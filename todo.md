@@ -118,6 +118,7 @@
 - [ ] JSON Tools: Find & replace (regex + preview) with batch edit confirmation
 - [ ] JSON Tools: Export selected subtree as new JSON file
 - [ ] JSON Tools: Collapsed state serialization (shareable URL param)
+- [ ] JSON Tools: Multi-sheet XLSX export (follow-up to Issue #22; current CSV ZIP implemented)
 - [ ] Add Blog (MDX) Skeleton
 - [ ] Rate Limit Contact Form (basic in-memory or Convex rate doc)
 - [ ] Email / Notification on New Message (Convex action or 3rd-party)

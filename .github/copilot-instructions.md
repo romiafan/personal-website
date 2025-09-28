@@ -114,3 +114,7 @@ Always use these configured aliases:
 - Use proper semantic HTML and accessibility practices
 
 When implementing new features, always reference the `website-plan.md` for detailed specifications and maintain strict adherence to the defined technology stack.
+
+Before and after doing task, always check and update the `todo.md` file to check next steps and put next plans to implement.
+
+Put the P0 and P1 task on github issues and link them in the `todo.md` and `ROADMAP_ISSUE.md` file.
