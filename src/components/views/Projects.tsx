@@ -8,6 +8,7 @@ import { fadeInUp, staggerContainer } from "@/lib/motion";
 import { ProjectCard } from "./ProjectCard";
 import { FeaturedProject } from './FeaturedProject';
 import { useToast } from "@/components/providers/toast-provider";
+import { useUser } from '@clerk/nextjs';
 
 interface ProjectDoc {
   _id: Id<"projects">;
@@ -46,6 +47,9 @@ export function Projects() {
   const sync = useMutation(api.projects.syncFromGitHub);
   const ownerId = process.env.NEXT_PUBLIC_OWNER_USER_ID; // Exposed via build-time
   const { push } = useToast();
+  const { user } = useUser();
+
+  const isOwner = !!ownerId && user?.id === ownerId;
 
   async function handleSync() {
     // Placeholder: client-side fetch of public GitHub repos (unauthenticated)
@@ -78,7 +82,12 @@ export function Projects() {
         variant: 'success'
       });
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Unknown error";
+      let message = e instanceof Error ? e.message : "Unknown error";
+      if (/Unauthorized/i.test(message)) {
+        message = 'You must be signed in as the site owner to sync projects.';
+      } else if (/Forbidden: not owner/i.test(message)) {
+        message = 'Only the configured owner account can sync.';
+      }
       push({
         title: 'Sync Failed',
         description: message,
@@ -143,7 +152,7 @@ export function Projects() {
           <motion.div variants={fadeInUp} className="flex flex-col gap-4 text-center items-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-5xl">Projects</h2>
             <p className="text-gray-500 md:text-lg dark:text-gray-400 max-w-2xl">Selected engineering work, experiments, and tools. Continuously synced from GitHub into Convex storage.</p>
-            {ownerId && (
+            {isOwner && (
               <div className="pt-1">
                 <button
                   onClick={handleSync}

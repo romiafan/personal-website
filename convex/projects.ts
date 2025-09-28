@@ -57,11 +57,11 @@ export const syncFromGitHub = mutation({
     // Enforce authentication & ownership (defense-in-depth beyond UI gating)
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized: missing authentication (sign in required)");
     }
     const ownerId = process.env.NEXT_PUBLIC_OWNER_USER_ID;
     if (ownerId && identity.subject !== ownerId) {
-      throw new Error("Forbidden: not owner");
+      throw new Error("Forbidden: not owner (only site owner can sync)");
     }
 
     // Basic sanity check: limit bulk inserts
