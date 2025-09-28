@@ -24,7 +24,7 @@
 | P3       | #20   | JSON Tools Find & Replace                                                                                    |
 | P3       | #21   | JSON Tools Persist History                                                                                   |
 | P2       | #22   | JSON Tools Multi-Sheet Workbook Export (CSV ZIP)                                                             |
-| P2       | #23   | JSON Tools Multi-Sheet XLSX Export (dynamic sheetjs, union-of-keys columns, safe sheet names)               |
+| P2       | #23   | JSON Tools Multi-Sheet XLSX Export (dynamic sheetjs, union-of-keys columns, safe sheet names)                |
 
 ## Details
 
