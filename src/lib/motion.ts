@@ -1,6 +1,6 @@
-// Temporary compatibility shim after refactor to directory-based barrel.
-// TODO(#26): Remove once all imports confirmed updated and Turbopack cache invalidations are clean.
-export * from './motion/base';
-// Thin re-export layer kept for backwards compatibility.
-// Prefer importing from '@/lib/motion/base' for tree-shaking (#26).
+/**
+ * DEPRECATED shim: prefer importing from `@/lib/motion` (directory index) or `@/lib/motion/base`.
+ * This file remains temporarily to avoid Vercel/Turbopack stale graph issues.
+ * Remove after confirming no build references this specific file path in logs.
+ */
 export * from './motion/base';
