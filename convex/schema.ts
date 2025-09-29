@@ -22,6 +22,13 @@ export default defineSchema({
     message: v.string(),
     created_at: v.string(),
   }).searchIndex("by_email", { searchField: "email" }),
+  contactRateLimits: defineTable({
+    // key could be email hash or IP placeholder. For now using raw email (hash later if needed).
+    key: v.string(),
+    window_start: v.number(), // epoch ms window start
+    count: v.number(),
+    last_attempt: v.number(),
+  }).index('by_key', ['key']),
   auditLogs: defineTable({
     actor: v.string(), // user id or system
     action: v.string(), // e.g., 'github.sync'

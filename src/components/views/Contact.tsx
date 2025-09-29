@@ -65,6 +65,14 @@ export function Contact() {
     [form]
   );
 
+  interface SendResultSuccess {
+    id: string;
+  }
+  interface SendResultRateLimited {
+    error: { code: "RATE_LIMIT"; retry_after_ms: number; message: string };
+  }
+  type SendResult = SendResultSuccess | SendResultRateLimited | undefined;
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const parsed = contactSchema.safeParse(form);
@@ -80,11 +88,19 @@ export function Contact() {
     }
     setStatus("submitting");
     try {
-      await sendMessage({
+      const result: SendResult = await sendMessage({
         name: parsed.data.name,
         email: parsed.data.email,
         message: parsed.data.message,
       });
+      if (result && "error" in result && result.error.code === "RATE_LIMIT") {
+        setStatus("error");
+        setErrors((prev) => ({
+          ...prev,
+          message: result.error.message,
+        }));
+        return;
+      }
       setStatus("success");
       setForm({ name: "", email: "", message: "" });
       setErrors({});
@@ -197,7 +213,7 @@ export function Contact() {
                 Message sent!
               </motion.p>
             )}
-            {status === "error" && (
+            {status === "error" && !errors.message && (
               <motion.p
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}

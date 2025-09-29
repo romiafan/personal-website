@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
-import { Star, GitFork } from 'lucide-react';
-import { relativeTime, languageColor, cn } from '@/lib/utils';
+import { Star, GitFork } from "lucide-react";
+import { relativeTime, languageColor, cn } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export interface ProjectCardProps {
@@ -27,7 +27,7 @@ export function ProjectCard({
   stars,
   forks,
   className,
-  updated_at
+  updated_at,
 }: ProjectCardProps) {
   return (
     <motion.div
@@ -44,13 +44,17 @@ export function ProjectCard({
     >
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold tracking-tight line-clamp-1 flex-1">{name}</h3>
+          <h3 className="font-semibold tracking-tight line-clamp-1 flex-1">
+            {name}
+          </h3>
           {language && (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
               {languageColor(language) && (
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: languageColor(language) || undefined }}
+                  style={{
+                    backgroundColor: languageColor(language) || undefined,
+                  }}
                 />
               )}
               {language}
@@ -58,7 +62,9 @@ export function ProjectCard({
           )}
         </div>
         {description && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3">{description}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3">
+            {description}
+          </p>
         )}
         <div className="flex flex-wrap gap-1 pt-1">
           {topics.slice(0, 3).map((t) => (
@@ -73,8 +79,14 @@ export function ProjectCard({
       </div>
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-4">
-          <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 text-yellow-500" />{stars}</span>
-          <span className="inline-flex items-center gap-1"><GitFork className="h-3.5 w-3.5" />{forks}</span>
+          <span className="inline-flex items-center gap-1">
+            <Star className="h-3.5 w-3.5 text-yellow-500" />
+            {stars}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <GitFork className="h-3.5 w-3.5" />
+            {forks}
+          </span>
         </div>
         {updated_at && (
           <span className="whitespace-nowrap">{relativeTime(updated_at)}</span>
