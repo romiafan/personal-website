@@ -376,8 +376,8 @@ function ProjectCard({ project }: { project: Project }) {
   };
 
   return (
-    <Card className="h-full hover:shadow-lg transition-all duration-300 group">
-      <CardHeader>
+    <Card className="h-full hover:shadow-lg transition-all duration-300 group flex flex-col">
+      <CardHeader className="flex-shrink-0">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <CardTitle className="text-xl mb-2 group-hover:text-primary transition-colors">
@@ -389,69 +389,76 @@ function ProjectCard({ project }: { project: Project }) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Language and Topics */}
-        <div className="flex flex-wrap gap-2">
-          {project.language && (
-            <Badge variant="default" className="text-xs">
-              <Code className="w-3 h-3 mr-1" />
-              {project.language}
-            </Badge>
-          )}
-          {project.topics.slice(0, 2).map((topic: string) => (
-            <Badge key={topic} variant="secondary" className="text-xs">
-              {topic}
-            </Badge>
-          ))}
-          {project.topics.length > 2 && (
-            <Badge variant="outline" className="text-xs">
-              +{project.topics.length - 2}
-            </Badge>
-          )}
+      <CardContent className="flex-1 flex flex-col justify-between space-y-4">
+        <div className="space-y-4">
+          {/* Language and Topics */}
+          <div className="flex flex-wrap gap-2">
+            {project.language && (
+              <Badge variant="default" className="text-xs">
+                <Code className="w-3 h-3 mr-1" />
+                {project.language}
+              </Badge>
+            )}
+            {project.topics.slice(0, 2).map((topic: string) => (
+              <Badge key={topic} variant="secondary" className="text-xs">
+                {topic}
+              </Badge>
+            ))}
+            {project.topics.length > 2 && (
+              <Badge variant="outline" className="text-xs">
+                +{project.topics.length - 2}
+              </Badge>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4" />
+              {project.stargazers_count}
+            </div>
+            <div className="flex items-center gap-1">
+              <GitFork className="w-4 h-4" />
+              {project.forks_count}
+            </div>
+            <div className="flex items-center gap-1">
+              <Calendar className="w-4 h-4" />
+              {formatDate(project.updated_at)}
+            </div>
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Star className="w-4 h-4" />
-            {project.stargazers_count}
-          </div>
-          <div className="flex items-center gap-1">
-            <GitFork className="w-4 h-4" />
-            {project.forks_count}
-          </div>
-          <div className="flex items-center gap-1">
-            <Calendar className="w-4 h-4" />
-            {formatDate(project.updated_at)}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
-          <Button asChild size="sm" className="flex-1">
+        {/* Action Buttons - Always at bottom */}
+        <div className="flex gap-2 w-full overflow-hidden mt-auto">
+          <Button asChild size="sm" className="flex-1 min-w-0">
             <Link
               href={project.html_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
+              className="inline-flex items-center justify-center gap-2 w-full"
             >
-              <Github className="w-4 h-4" />
-              View Code
-              <ExternalLink className="w-3 h-3" />
+              <Github className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">View Code</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
             </Link>
           </Button>
 
           {project.homepage && (
-            <Button asChild variant="outline" size="sm">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0 w-auto max-w-[120px]"
+            >
               <Link
                 href={project.homepage}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2"
+                className="inline-flex items-center justify-center gap-1 px-3"
               >
-                <Globe className="w-4 h-4" />
-                Live Demo
-                <ExternalLink className="w-3 h-3" />
+                <Globe className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate text-xs">Live</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
               </Link>
             </Button>
           )}

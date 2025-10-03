@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Github, Linkedin } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
@@ -17,6 +18,8 @@ export function Navbar() {
   const { user } = useUser();
   const ownerId = process.env.NEXT_PUBLIC_OWNER_USER_ID;
   const [isOwner, setIsOwner] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     if (user && ownerId) {
@@ -25,6 +28,18 @@ export function Navbar() {
       setIsOwner(false);
     }
   }, [user, ownerId]);
+
+  // Handle navigation to hash sections
+  const handleHashNavigation = (hash: string) => {
+    if (pathname === "/") {
+      // Already on homepage, just scroll to section
+      const element = document.getElementById(hash.replace("#", ""));
+      element?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // Navigate to homepage with hash
+      router.push(`/${hash}`);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -41,30 +56,33 @@ export function Navbar() {
         <nav className="flex items-center space-x-6">
           {/* Internal anchors */}
           <div className="hidden md:flex items-center space-x-6 text-sm font-medium">
-            <Link
-              href="#about"
+            <button
+              onClick={() => handleHashNavigation("#about")}
               className="transition-colors hover:text-primary"
             >
               About
-            </Link>
+            </button>
             <Link
               href="/projects"
               className="transition-colors hover:text-primary"
             >
               Projects
             </Link>
-            <Link href="#tech" className="transition-colors hover:text-primary">
+            <button
+              onClick={() => handleHashNavigation("#tech")}
+              className="transition-colors hover:text-primary"
+            >
               Tech
-            </Link>
+            </button>
             <Link href="/blog" className="transition-colors hover:text-primary">
               Blog
             </Link>
-            <Link
-              href="#contact"
+            <button
+              onClick={() => handleHashNavigation("#contact")}
               className="transition-colors hover:text-primary"
             >
               Contact
-            </Link>
+            </button>
             {isOwner && (
               <Link
                 href="/toolkit"
