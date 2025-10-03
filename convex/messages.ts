@@ -6,6 +6,56 @@ import { v } from "convex/values";
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const WINDOW_MAX = 5;
 
+// Email notification configuration
+const NOTIFICATION_EMAIL = "roman@romiafan.com"; // Replace with your email
+const FROM_EMAIL = "noreply@romiafan.com"; // Replace with your domain email
+
+async function sendEmailNotification(args: {
+  name: string;
+  email: string;
+  message: string;
+}) {
+  // Skip email sending if no API key is configured
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("RESEND_API_KEY not configured, skipping email notification");
+    return;
+  }
+
+  try {
+    // Dynamic import to avoid bundling Resend in client code
+    const { Resend } = await import("resend");
+    const resend = new Resend(apiKey);
+
+    const emailContent = `
+New Contact Form Submission
+
+From: ${args.name} <${args.email}>
+Submitted: ${new Date().toLocaleString()}
+
+Message:
+${args.message}
+
+---
+This message was sent via the contact form on your personal website.
+You can reply directly to this email to respond to ${args.name}.
+    `.trim();
+
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: NOTIFICATION_EMAIL,
+      subject: `New Contact: ${args.name}`,
+      text: emailContent,
+      replyTo: args.email, // Allow direct replies to the sender
+    });
+
+    console.log("Email notification sent successfully");
+  } catch (error) {
+    // Log error but don't fail the mutation - email is a nice-to-have
+    console.error("Failed to send email notification:", error);
+  }
+}
+
 export const send = mutation({
   args: {
     name: v.string(),
@@ -59,6 +109,11 @@ export const send = mutation({
       email: args.email,
       message: args.message,
       created_at: new Date().toISOString(),
+    });
+
+    // Send email notification asynchronously (don't await to avoid blocking the response)
+    sendEmailNotification(args).catch((error) => {
+      console.error("Email notification failed:", error);
     });
 
     return { id: messageId } as const;

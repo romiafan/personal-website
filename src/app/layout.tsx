@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { GeistSans, GeistMono } from "geist/font";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
@@ -8,11 +8,9 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/providers/toast-provider";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
+import { PerformanceMonitor } from "@/components/ui/PerformanceMonitor";
+import { ResourceHints } from "@/components/ui/ResourceHints";
+import { WebVitalsTracker } from "@/components/ui/WebVitalsTracker";
 
 export const metadata: Metadata = {
   title: {
@@ -53,7 +51,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body
+        className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
+      >
         {/* Prevent theme flash: pre-hydration script */}
         <script
           dangerouslySetInnerHTML={{
@@ -76,6 +76,7 @@ export default function RootLayout({
           }}
         />
         <ClerkProvider>
+          <ResourceHints />
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -108,6 +109,8 @@ export default function RootLayout({
                       {children}
                     </main>
                     <Footer />
+                    <PerformanceMonitor />
+                    <WebVitalsTracker />
                   </div>
                 </ToastProvider>
               </MotionProvider>

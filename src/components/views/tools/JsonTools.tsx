@@ -72,6 +72,19 @@ export function JsonTools() {
   const [replaceModeRegex, setReplaceModeRegex] = useState(true);
   const [replaceError, setReplaceError] = useState("");
   const [replaceMatchCount, setReplaceMatchCount] = useState<number>(0);
+  // --- Export Selected Subtree (Issue #29) ---
+  const [exportPanelOpen, setExportPanelOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"json" | "csv" | "yaml">(
+    "json"
+  );
+  const [exportMinified, setExportMinified] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState<Set<string>>(
+    new Set()
+  );
+  const [exportError, setExportError] = useState("");
+  // --- URL State Serialization (Issue #30) ---
+  const [urlStateEnabled, setUrlStateEnabled] = useState(false);
+  const urlStateTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // LocalStorage keys (centralized)
   const PREFS_KEY = "jsonToolsPrefs";
@@ -1335,6 +1348,407 @@ export function JsonTools() {
     push,
   ]);
 
+  // Export Selected Subtree Implementation (Issue #29)
+  const extractSubtree = useCallback((path: string, root: unknown): unknown => {
+    if (path === "root") return root;
+
+    const parts = path.split(".").slice(1); // remove 'root' prefix
+    let current: unknown = root;
+
+    for (const part of parts) {
+      if (current === null || current === undefined) return undefined;
+
+      if (Array.isArray(current)) {
+        const index = parseInt(part, 10);
+        if (isNaN(index) || index < 0 || index >= current.length)
+          return undefined;
+        current = current[index];
+      } else if (current && typeof current === "object") {
+        current = (current as Record<string, unknown>)[part];
+      } else {
+        return undefined;
+      }
+    }
+
+    return current;
+  }, []);
+
+  const convertToYaml = useCallback((data: unknown): string => {
+    // Simple YAML conversion - not a full YAML library but good enough for basic structures
+    const yamlify = (value: unknown, indent = 0): string => {
+      const spaces = "  ".repeat(indent);
+
+      if (value === null) return "null";
+      if (typeof value === "undefined") return "undefined";
+      if (typeof value === "boolean") return value.toString();
+      if (typeof value === "number") return value.toString();
+      if (typeof value === "string") {
+        // Simple string escaping for YAML
+        if (
+          value.includes("\n") ||
+          value.includes(":") ||
+          value.includes("[") ||
+          value.includes("{")
+        ) {
+          return `"${value.replace(/"/g, '\\"')}"`;
+        }
+        return value;
+      }
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) return "[]";
+        return value
+          .map(
+            (item) =>
+              `${spaces}- ${yamlify(item, indent + 1).replace(/^\s+/, "")}`
+          )
+          .join("\n");
+      }
+
+      if (value && typeof value === "object") {
+        const entries = Object.entries(value as Record<string, unknown>);
+        if (entries.length === 0) return "{}";
+        return entries
+          .map(([key, val]) => {
+            const yamlValue = yamlify(val, indent + 1);
+            if (yamlValue.includes("\n")) {
+              return `${spaces}${key}:\n${yamlValue}`;
+            }
+            return `${spaces}${key}: ${yamlValue}`;
+          })
+          .join("\n");
+      }
+
+      return String(value);
+    };
+
+    return yamlify(data);
+  }, []);
+
+  const exportSubtree = useCallback(
+    async (path: string) => {
+      if (!result?.parsed) {
+        push({
+          title: "Export Error",
+          description: "No valid JSON data to export",
+          variant: "error",
+        });
+        return;
+      }
+
+      try {
+        const subtree = extractSubtree(path, result.parsed);
+        if (subtree === undefined) {
+          push({
+            title: "Export Error",
+            description: "Invalid path or data not found",
+            variant: "error",
+          });
+          return;
+        }
+
+        let content: string;
+        let filename: string;
+        let mimeType: string;
+
+        const pathForFilename =
+          path === "root"
+            ? "root"
+            : path.replace(/^root\.?/, "").replace(/\./g, "_");
+
+        switch (exportFormat) {
+          case "json":
+            content = exportMinified
+              ? JSON.stringify(subtree)
+              : JSON.stringify(subtree, null, 2);
+            filename = `${pathForFilename || "data"}.json`;
+            mimeType = "application/json";
+            break;
+
+          case "csv":
+            if (!Array.isArray(subtree)) {
+              push({
+                title: "Export Error",
+                description: "CSV export requires an array of objects",
+                variant: "error",
+              });
+              return;
+            }
+            const csvResult = jsonToCsv(subtree);
+            content = csvResult.csv;
+            filename = `${pathForFilename || "data"}.csv`;
+            mimeType = "text/csv";
+            break;
+
+          case "yaml":
+            content = convertToYaml(subtree);
+            filename = `${pathForFilename || "data"}.yaml`;
+            mimeType = "text/yaml";
+            break;
+
+          default:
+            throw new Error("Unsupported export format");
+        }
+
+        // Create and download the file
+        const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        push({
+          title: "Export Complete",
+          description: `Subtree exported as ${filename}`,
+          variant: "success",
+        });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Export failed";
+        push({
+          title: "Export Error",
+          description: message,
+          variant: "error",
+        });
+      }
+    },
+    [
+      result?.parsed,
+      extractSubtree,
+      exportFormat,
+      exportMinified,
+      convertToYaml,
+      push,
+    ]
+  );
+
+  const exportMultipleSubtrees = useCallback(async () => {
+    if (!result?.parsed || selectedForExport.size === 0) {
+      push({
+        title: "Export Error",
+        description: "No paths selected for export",
+        variant: "error",
+      });
+      return;
+    }
+
+    try {
+      const [{ default: JSZip }] = await Promise.all([import("jszip")]);
+      const zip = new JSZip();
+      let successCount = 0;
+
+      for (const path of selectedForExport) {
+        try {
+          const subtree = extractSubtree(path, result.parsed);
+          if (subtree === undefined) continue;
+
+          const pathForFilename =
+            path === "root"
+              ? "root"
+              : path.replace(/^root\.?/, "").replace(/\./g, "_");
+          let content: string;
+          let extension: string;
+
+          switch (exportFormat) {
+            case "json":
+              content = exportMinified
+                ? JSON.stringify(subtree)
+                : JSON.stringify(subtree, null, 2);
+              extension = "json";
+              break;
+
+            case "csv":
+              if (!Array.isArray(subtree)) continue; // Skip non-arrays for CSV
+              const csvResult = jsonToCsv(subtree);
+              content = csvResult.csv;
+              extension = "csv";
+              break;
+
+            case "yaml":
+              content = convertToYaml(subtree);
+              extension = "yaml";
+              break;
+
+            default:
+              continue;
+          }
+
+          zip.file(
+            `${pathForFilename || `item_${successCount}`}.${extension}`,
+            content
+          );
+          successCount++;
+        } catch {
+          // Skip individual failures, continue with others
+        }
+      }
+
+      if (successCount === 0) {
+        push({
+          title: "Export Error",
+          description: "No valid data could be exported",
+          variant: "error",
+        });
+        return;
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `json_export_${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      push({
+        title: "Export Complete",
+        description: `${successCount} subtree${successCount !== 1 ? "s" : ""} exported as ZIP`,
+        variant: "success",
+      });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Batch export failed";
+      push({
+        title: "Export Error",
+        description: message,
+        variant: "error",
+      });
+    }
+  }, [
+    result?.parsed,
+    selectedForExport,
+    extractSubtree,
+    exportFormat,
+    exportMinified,
+    convertToYaml,
+    push,
+  ]);
+
+  // URL State Serialization Implementation (Issue #30)
+  const serializeCollapsedState = useCallback(
+    (collapsedSet: Set<string>): string => {
+      if (collapsedSet.size === 0) return "";
+
+      // Convert paths to a more compact representation
+      const paths = Array.from(collapsedSet);
+      try {
+        // Use JSON + base64 for compact serialization
+        const jsonStr = JSON.stringify(paths);
+        const compressed = btoa(jsonStr).replace(/[+/=]/g, (char) => {
+          // URL-safe base64
+          if (char === "+") return "-";
+          if (char === "/") return "_";
+          return "";
+        });
+
+        // Limit URL size to prevent browser issues
+        if (compressed.length > 2000) {
+          // If too long, only preserve top-level paths
+          const topLevelPaths = paths.filter(
+            (p) => (p.match(/\./g) || []).length <= 2
+          );
+          const shortJsonStr = JSON.stringify(topLevelPaths);
+          return btoa(shortJsonStr).replace(/[+/=]/g, (char) => {
+            if (char === "+") return "-";
+            if (char === "/") return "_";
+            return "";
+          });
+        }
+
+        return compressed;
+      } catch {
+        return "";
+      }
+    },
+    []
+  );
+
+  const deserializeCollapsedState = useCallback(
+    (serialized: string): Set<string> => {
+      if (!serialized) return new Set();
+
+      try {
+        // Restore URL-safe base64
+        const base64 = serialized.replace(/[-_]/g, (char) => {
+          if (char === "-") return "+";
+          if (char === "_") return "/";
+          return char;
+        });
+
+        // Add padding if needed
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const jsonStr = atob(padded);
+        const paths = JSON.parse(jsonStr);
+
+        if (Array.isArray(paths)) {
+          return new Set(paths.filter((p) => typeof p === "string"));
+        }
+      } catch {
+        // Ignore malformed state
+      }
+
+      return new Set();
+    },
+    []
+  );
+
+  const loadUrlState = useCallback(() => {
+    if (!urlStateEnabled) return;
+
+    try {
+      const url = new URL(window.location.href);
+      const treeState = url.searchParams.get("treeState");
+
+      if (treeState) {
+        const restoredCollapsed = deserializeCollapsedState(treeState);
+        setCollapsed(restoredCollapsed);
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, [urlStateEnabled, deserializeCollapsedState]);
+
+  // Update URL when collapsed state changes (debounced)
+  useEffect(() => {
+    if (!urlStateEnabled || !result?.parsed) return;
+
+    // Clear existing timer
+    if (urlStateTimerRef.current) {
+      clearTimeout(urlStateTimerRef.current);
+    }
+
+    // Debounce URL updates to prevent excessive history entries
+    const timer = setTimeout(() => {
+      const serialized = serializeCollapsedState(collapsed);
+      const url = new URL(window.location.href);
+
+      if (serialized) {
+        url.searchParams.set("treeState", serialized);
+      } else {
+        url.searchParams.delete("treeState");
+      }
+
+      // Update URL without triggering navigation
+      window.history.replaceState({}, "", url.toString());
+    }, 500);
+
+    urlStateTimerRef.current = timer;
+
+    // Cleanup timer
+    return () => {
+      if (urlStateTimerRef.current) {
+        clearTimeout(urlStateTimerRef.current);
+      }
+    };
+  }, [collapsed, urlStateEnabled, result?.parsed, serializeCollapsedState]);
+
+  // Load URL state when feature is enabled
+  useEffect(() => {
+    if (urlStateEnabled && result?.parsed) {
+      loadUrlState();
+    }
+  }, [urlStateEnabled, result?.parsed, loadUrlState]);
+
   // Additional keyboard shortcuts for find/replace
   useEffect(() => {
     function handler(e: KeyboardEvent) {
@@ -1744,6 +2158,15 @@ export function JsonTools() {
                   Auto-Virtual Recommended
                 </span>
               )}
+              <Button
+                onClick={() => setUrlStateEnabled((u) => !u)}
+                size="sm"
+                variant={urlStateEnabled ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                title="Enable URL state serialization for shareable tree views"
+              >
+                {urlStateEnabled ? "URL State On" : "URL State Off"}
+              </Button>
             </div>
           ) : null}
           {showTree && (
@@ -1754,6 +2177,16 @@ export function JsonTools() {
               className="h-7 px-2 text-xs"
             >
               {replacePanelOpen ? "Hide Replace" : "Find & Replace"}
+            </Button>
+          )}
+          {showTree && selectedPath && (
+            <Button
+              onClick={() => setExportPanelOpen((o) => !o)}
+              size="sm"
+              variant={exportPanelOpen ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+            >
+              {exportPanelOpen ? "Hide Export" : "Export Subtree"}
             </Button>
           )}
         </div>
@@ -2024,6 +2457,141 @@ export function JsonTools() {
             Find & Replace supports both plain text and regex patterns. Use
             Preview to see changes before applying. All replacements are added
             as a single undo step for easy rollback.
+          </p>
+        </div>
+      )}
+      {showTree && exportPanelOpen && selectedPath && (
+        <div className="rounded-md border bg-muted/40 p-3 space-y-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Export Path</label>
+              <div className="text-xs bg-background border rounded px-2 py-1 font-mono min-w-[200px]">
+                {selectedPath.replace(/^root\.?/, "") || "root"}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium">Format</label>
+              <select
+                value={exportFormat}
+                onChange={(e) =>
+                  setExportFormat(e.target.value as "json" | "csv" | "yaml")
+                }
+                className="rounded border bg-background px-2 py-1 text-xs"
+              >
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+                <option value="yaml">YAML</option>
+              </select>
+            </div>
+            {exportFormat === "json" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-medium">Options</label>
+                <label className="flex items-center gap-1 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exportMinified}
+                    onChange={(e) => setExportMinified(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  Minified
+                </label>
+              </div>
+            )}
+            <div className="flex gap-2 items-center ml-auto">
+              <Button
+                size="sm"
+                onClick={() => exportSubtree(selectedPath)}
+                className="h-8 px-3 text-[11px]"
+                title="Export the selected subtree"
+              >
+                Export Single
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (selectedForExport.has(selectedPath)) {
+                    setSelectedForExport((prev) => {
+                      const next = new Set(prev);
+                      next.delete(selectedPath);
+                      return next;
+                    });
+                  } else {
+                    setSelectedForExport((prev) =>
+                      new Set(prev).add(selectedPath)
+                    );
+                  }
+                }}
+                className="h-8 px-3 text-[11px]"
+                title={
+                  selectedForExport.has(selectedPath)
+                    ? "Remove from batch"
+                    : "Add to batch export"
+                }
+              >
+                {selectedForExport.has(selectedPath)
+                  ? "Remove from Batch"
+                  : "Add to Batch"}
+              </Button>
+              {selectedForExport.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={exportMultipleSubtrees}
+                  className="h-8 px-3 text-[11px]"
+                  title="Export all selected paths as ZIP"
+                >
+                  Export {selectedForExport.size} as ZIP
+                </Button>
+              )}
+            </div>
+          </div>
+          {selectedForExport.size > 0 && (
+            <div className="rounded border bg-background/50 p-2">
+              <div className="text-[10px] font-medium mb-1">
+                Batch Export Queue:
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(selectedForExport).map((path) => (
+                  <span
+                    key={path}
+                    className="inline-flex items-center gap-1 text-[10px] bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5"
+                  >
+                    {path.replace(/^root\.?/, "") || "root"}
+                    <button
+                      onClick={() => {
+                        setSelectedForExport((prev) => {
+                          const next = new Set(prev);
+                          next.delete(path);
+                          return next;
+                        });
+                      }}
+                      className="text-muted-foreground hover:text-foreground ml-1"
+                      title="Remove from batch"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={() => setSelectedForExport(new Set())}
+                  className="text-[9px] text-muted-foreground hover:text-foreground underline"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+          )}
+          {exportError && (
+            <p className="text-[10px] text-red-600 dark:text-red-400">
+              {exportError}
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Export functionality allows you to extract selected JSON subtrees to
+            files. JSON format preserves structure, CSV works for arrays of
+            objects, and YAML provides human-readable output. Use batch export
+            to download multiple subtrees as a ZIP archive.
           </p>
         </div>
       )}

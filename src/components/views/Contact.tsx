@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import { motion } from "framer-motion";
 import { fadeInUp, staggerContainer } from "@/lib/motion";
 import { Section } from "@/components/layout/Section";
+import { useUser } from "@clerk/nextjs";
 
 interface FormState {
   name: string;
@@ -25,6 +26,7 @@ const contactSchema = z.object({
 });
 
 export function Contact() {
+  const { user } = useUser();
   const [form, setForm] = useState<FormState>({
     name: "",
     email: "",
@@ -225,6 +227,34 @@ export function Contact() {
           </div>
           <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-border/40 [mask:linear-gradient(180deg,white,transparent)]" />
         </motion.form>
+        {user && (
+          <motion.div
+            variants={fadeInUp}
+            className="mt-6 p-4 rounded-lg border bg-muted/30 text-left"
+          >
+            <h3 className="text-sm font-medium mb-2">
+              Email Notifications (Admin)
+            </h3>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>
+                <strong>Status:</strong>{" "}
+                {process.env.RESEND_API_KEY ? "Configured" : "Not configured"}
+              </p>
+              <p>
+                <strong>Service:</strong> Resend Email API
+              </p>
+              <p>
+                <strong>Setup:</strong> Add RESEND_API_KEY to environment
+                variables
+              </p>
+              {!process.env.RESEND_API_KEY && (
+                <p className="text-amber-600 dark:text-amber-400">
+                  Email notifications disabled - missing API key configuration
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
       </motion.div>
     </Section>
   );
