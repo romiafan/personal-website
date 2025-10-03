@@ -38,6 +38,7 @@ export function Navbar() {
             <Link href="#about" className="transition-colors hover:text-primary">About</Link>
             <Link href="#projects" className="transition-colors hover:text-primary">Projects</Link>
             <Link href="#tech" className="transition-colors hover:text-primary">Tech</Link>
+            <Link href="/blog" className="transition-colors hover:text-primary">Blog</Link>
             <Link href="#contact" className="transition-colors hover:text-primary">Contact</Link>
             {isOwner && (
               <Link href="/toolkit" className="transition-colors hover:text-primary">Toolkit</Link>

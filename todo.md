@@ -29,7 +29,7 @@ All prior P0 items (#1, #2) are completed. Monitoring only.
 
 - [ ] (#25) Theming: Interactive Theme Token Panel
 - [ ] (#26) Performance: Motion Variant Tree-Shaking
-- [ ] (#27) Content: Blog Route Group (MDX) Skeleton
+- [x] (#27) Content: Blog Route Group (MDX) Skeleton
 - [ ] (#31) Projects: Server-side Pagination & Tag Filtering
 
 ## P3 (Longer Term)
@@ -58,6 +58,7 @@ All prior P0 items (#1, #2) are completed. Monitoring only.
 Overall Estimated Completion: ~65%
 
 Category Snapshot:
+
 - Core Infrastructure: ~85% (needs reduced-motion pruning & variant tree-shake)
 - Data Layer (Convex): ~70% (auth-linked queries & telemetry pending)
 - Auth & Authorization: ~35% (Clerk provider + middleware gating outstanding) (#29)
@@ -67,16 +68,18 @@ Category Snapshot:
 - Theming System: ~55% (interactive token panel, semantic tokens) (#25)
 - Animation/Motion Strategy: ~60% (reduced-motion + registry pruning) (#24/#26)
 - Performance & Accessibility: ~40% (Lighthouse ≥90 targets, focus & ARIA audit)
-- Blog/MDX Content: ~10% (skeleton not started) (#27)
+- Blog/MDX Content: ~40% (skeleton complete, needs sample posts & actual MDX content) (#27)
 - Testing & Quality: ~15% (introduce Vitest + RTL baseline) (#30)
 - Deployment & Ops: ~50% (prod auth, env audit, SEO metadata, observability)
 
 New / Adjusted Priorities Just Added:
+
 1. (#29) Clerk integration (P1) – unlocks secure toolkit & future personalization.
 2. (#30) Test baseline (P1) – protect recent complexity (sync, JSON persistence).
 3. (#31) Server-side pagination & tag filtering (P2) – scalability & UX.
 
 Next 5 Recommended Actions (Execution Order):
+
 1. Implement Clerk provider + middleware; add auth UI in `Navbar` (#29).
 2. Add reduced-motion variant pruning + motion registry rationalization (#24/#26).
 3. Introduce Vitest + RTL; write 3 foundational tests (#30).
@@ -84,6 +87,7 @@ Next 5 Recommended Actions (Execution Order):
 5. Build theme token panel for design system introspection (#25).
 
 Risk / Watchlist:
+
 - Auth delay blocks secure expansion of owner-only tools.
 - Lack of tests risks regression in project sync & JSON tool state mgmt.
 - Accessibility & reduced-motion concerns could impact perceived polish.
