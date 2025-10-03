@@ -1,9 +1,11 @@
 "use client";
 import { motion } from "framer-motion";
-import { fadeInUp } from "@/lib/motion";
+import { useMotion } from "@/lib/motion/hooks";
 import { Section } from "@/components/layout/Section";
 
 export function About() {
+  const { fadeInUp } = useMotion();
+
   return (
     <Section
       id="about"

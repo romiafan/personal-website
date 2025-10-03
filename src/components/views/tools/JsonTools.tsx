@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
+import { VirtualizedJsonTree } from "./VirtualizedJsonTree";
 
 interface ParseResult {
   raw: string;
@@ -77,39 +78,45 @@ export function JsonTools() {
   const HISTORY_KEY = "jsonToolsHistory";
 
   // Persist history snapshots (raw + formatted only; parsed reconstructed on load)
-  function persistHistorySnapshots(snapshots: ParseResult[]) {
-    try {
-      const minimal = snapshots.slice(-50).map((s) => ({
-        raw: s.raw,
-        formatted: s.formatted,
-      }));
-      const payload = JSON.stringify({ snapshots: minimal });
-      // Guard against excessive size (~200KB)
-      if (payload.length > 200_000) {
-        setHistorySizeWarning(
-          "History persistence skipped: exceeds 200KB (clear or reduce edits)."
-        );
-        return;
+  const persistHistorySnapshots = useCallback(
+    (snapshots: ParseResult[]) => {
+      try {
+        const minimal = snapshots.slice(-50).map((s) => ({
+          raw: s.raw,
+          formatted: s.formatted,
+        }));
+        const payload = JSON.stringify({ snapshots: minimal });
+        // Guard against excessive size (~200KB)
+        if (payload.length > 200_000) {
+          setHistorySizeWarning(
+            "History persistence skipped: exceeds 200KB (clear or reduce edits)."
+          );
+          return;
+        }
+        localStorage.setItem(HISTORY_KEY, payload);
+        if (historySizeWarning) setHistorySizeWarning("");
+      } catch {
+        /* ignore */
       }
-      localStorage.setItem(HISTORY_KEY, payload);
-      if (historySizeWarning) setHistorySizeWarning("");
-    } catch {
-      /* ignore */
-    }
-  }
+    },
+    [HISTORY_KEY, historySizeWarning]
+  );
 
-  function pushHistory(entry: ParseResult) {
-    setHistory((prev) => {
-      const capped = prev.slice(0, historyIndex + 1); // drop any forward history
-      capped.push(entry);
-      // limit to last 50 states
-      const trimmed = capped.slice(-50);
-      setHistoryIndex(trimmed.length - 1);
-      if (persistHistory)
-        queueMicrotask(() => persistHistorySnapshots(trimmed));
-      return trimmed;
-    });
-  }
+  const pushHistory = useCallback(
+    (entry: ParseResult) => {
+      setHistory((prev) => {
+        const capped = prev.slice(0, historyIndex + 1); // drop any forward history
+        capped.push(entry);
+        // limit to last 50 states
+        const trimmed = capped.slice(-50);
+        setHistoryIndex(trimmed.length - 1);
+        if (persistHistory)
+          queueMicrotask(() => persistHistorySnapshots(trimmed));
+        return trimmed;
+      });
+    },
+    [historyIndex, persistHistory, persistHistorySnapshots]
+  );
 
   const undo = useCallback(() => {
     setHistoryIndex((i) => {
@@ -789,14 +796,14 @@ export function JsonTools() {
     setCollapsed(coll);
   }
 
-  // --- Renderer Abstraction (Virtualization groundwork - Issue #19) ---
-  // The current implementation is a recursive static renderer. We introduce an interface so we can
-  // later swap in a virtualized list without rewriting editing/search logic.
+  // --- Renderer Abstraction (Virtualization implementation - Issue #19) ---
+  // Two renderer implementations: static (recursive) and virtualized (windowed)
   interface JsonTreeRenderer {
     renderRoot(value: unknown): React.ReactNode;
   }
 
-  // Flag (temporary) to experiment with future virtualized renderer. Currently only static.
+  // Toggle between static and virtualized rendering based on dataset size and user preference
+  const [useVirtualization, setUseVirtualization] = useState<boolean>(false);
 
   function renderNode(
     value: unknown,
@@ -1044,7 +1051,331 @@ export function JsonTools() {
   const showTree: boolean =
     mode === "tree" && !!result?.parsed && !result?.error;
 
-  // Compute match count for Find & Replace (skeleton only, no mutation yet)
+  // Find & Replace Implementation (Issue #20)
+  const performReplace = useCallback(
+    (replaceOne: boolean = false): void => {
+      if (!result?.parsed || !replacePattern.trim()) {
+        push({
+          title: "Replace Error",
+          description: "No pattern specified or invalid JSON",
+          variant: "error",
+        });
+        return;
+      }
+
+      try {
+        // Clone the current parsed data
+        const rootCopy = structuredClone
+          ? structuredClone(result.parsed)
+          : JSON.parse(JSON.stringify(result.parsed));
+
+        let replacementCount = 0;
+        const MAX_REPLACEMENTS = 10000; // Safety limit
+
+        // Create matcher function
+        let matcher: (value: string) => boolean;
+        let replacer: (value: string) => string;
+
+        if (replaceModeRegex) {
+          const regex = new RegExp(replacePattern, replaceFlags);
+          matcher = (value: string) => regex.test(value);
+          replacer = (value: string) => value.replace(regex, replaceValue);
+        } else {
+          const flags = replaceFlags.includes("i") ? "gi" : "g";
+          const searchRegex = new RegExp(
+            replacePattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            flags
+          );
+          matcher = (value: string) => searchRegex.test(value);
+          replacer = (value: string) =>
+            value.replace(searchRegex, replaceValue);
+        }
+
+        // Recursive replacement function
+        function replaceInValue(val: unknown): unknown {
+          if (replacementCount >= MAX_REPLACEMENTS) return val;
+
+          if (typeof val === "string") {
+            if (matcher(val)) {
+              const newVal = replacer(val);
+              if (newVal !== val) {
+                replacementCount++;
+                if (replaceOne && replacementCount === 1) {
+                  return newVal;
+                } else if (!replaceOne) {
+                  return newVal;
+                }
+              }
+            }
+            return val;
+          }
+
+          if (typeof val === "number" || typeof val === "boolean") {
+            const strVal = String(val);
+            if (matcher(strVal)) {
+              const newVal = replacer(strVal);
+              if (newVal !== strVal) {
+                replacementCount++;
+                // Try to convert back to original type
+                if (typeof val === "number") {
+                  const num = Number(newVal);
+                  if (!Number.isNaN(num)) {
+                    if (replaceOne && replacementCount === 1) return num;
+                    else if (!replaceOne) return num;
+                  }
+                } else if (typeof val === "boolean") {
+                  if (newVal === "true") {
+                    if (replaceOne && replacementCount === 1) return true;
+                    else if (!replaceOne) return true;
+                  } else if (newVal === "false") {
+                    if (replaceOne && replacementCount === 1) return false;
+                    else if (!replaceOne) return false;
+                  }
+                }
+                // Fall back to string if conversion fails
+                if (replaceOne && replacementCount === 1) return newVal;
+                else if (!replaceOne) return newVal;
+              }
+            }
+            return val;
+          }
+
+          if (val === null) {
+            const nullStr = "null";
+            if (matcher(nullStr)) {
+              const newVal = replacer(nullStr);
+              if (newVal !== nullStr) {
+                replacementCount++;
+                // Try to parse as JSON value
+                try {
+                  const parsed = JSON.parse(newVal);
+                  if (replaceOne && replacementCount === 1) return parsed;
+                  else if (!replaceOne) return parsed;
+                } catch {
+                  // Fall back to string
+                  if (replaceOne && replacementCount === 1) return newVal;
+                  else if (!replaceOne) return newVal;
+                }
+              }
+            }
+            return val;
+          }
+
+          if (Array.isArray(val)) {
+            return val.map(replaceInValue);
+          }
+
+          if (val && typeof val === "object") {
+            const result: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(
+              val as Record<string, unknown>
+            )) {
+              result[key] = replaceInValue(value);
+              if (replaceOne && replacementCount >= 1) break;
+            }
+            return result;
+          }
+
+          return val;
+        }
+
+        const newData = replaceInValue(rootCopy);
+        const formatted = JSON.stringify(newData, null, 2);
+
+        if (replacementCount === 0) {
+          push({
+            title: "No Replacements",
+            description: "No matches found for the specified pattern",
+            variant: "default",
+          });
+          return;
+        }
+
+        // Update the result and add to history
+        const newResult = { raw: result.raw, formatted, parsed: newData };
+        setResult(newResult);
+        pushHistory(newResult);
+
+        push({
+          title: replaceOne ? "Replaced One" : "Replace All Complete",
+          description: `${replacementCount} replacement${replacementCount !== 1 ? "s" : ""} made`,
+          variant: "success",
+        });
+      } catch (e: unknown) {
+        const message =
+          e instanceof Error ? e.message : "Replace operation failed";
+        push({
+          title: "Replace Error",
+          description: message,
+          variant: "error",
+        });
+      }
+    },
+    [
+      result,
+      replacePattern,
+      replaceModeRegex,
+      replaceFlags,
+      replaceValue,
+      push,
+      setResult,
+      pushHistory,
+    ]
+  );
+
+  // Preview replacements (dry run)
+  const previewReplace = useCallback((): void => {
+    if (!result?.parsed || !replacePattern.trim()) return;
+
+    try {
+      let previewCount = 0;
+      const previews: Array<{ path: string; old: string; new: string }> = [];
+      const MAX_PREVIEWS = 20; // Limit preview items
+
+      // Create matcher and replacer
+      let matcher: (value: string) => boolean;
+      let replacer: (value: string) => string;
+
+      if (replaceModeRegex) {
+        const regex = new RegExp(replacePattern, replaceFlags);
+        matcher = (value: string) => regex.test(value);
+        replacer = (value: string) => value.replace(regex, replaceValue);
+      } else {
+        const flags = replaceFlags.includes("i") ? "gi" : "g";
+        const searchRegex = new RegExp(
+          replacePattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          flags
+        );
+        matcher = (value: string) => searchRegex.test(value);
+        replacer = (value: string) => value.replace(searchRegex, replaceValue);
+      }
+
+      // Walk the tree and collect preview data
+      function walkForPreview(val: unknown, path: string): void {
+        if (previewCount >= MAX_PREVIEWS) return;
+
+        if (
+          typeof val === "string" ||
+          typeof val === "number" ||
+          typeof val === "boolean" ||
+          val === null
+        ) {
+          const strVal = val === null ? "null" : String(val);
+          if (matcher(strVal)) {
+            const newVal = replacer(strVal);
+            if (newVal !== strVal) {
+              previews.push({
+                path: path.replace(/^root\.?/, "") || "root",
+                old: strVal,
+                new: newVal,
+              });
+              previewCount++;
+            }
+          }
+        }
+
+        if (Array.isArray(val)) {
+          val.forEach((item, i) => {
+            if (previewCount < MAX_PREVIEWS) {
+              walkForPreview(item, `${path}.${i}`);
+            }
+          });
+        } else if (val && typeof val === "object") {
+          Object.entries(val as Record<string, unknown>).forEach(
+            ([key, value]) => {
+              if (previewCount < MAX_PREVIEWS) {
+                walkForPreview(value, `${path}.${key}`);
+              }
+            }
+          );
+        }
+      }
+
+      walkForPreview(result.parsed, "root");
+
+      if (previews.length === 0) {
+        push({
+          title: "Preview",
+          description: "No matches found for replacement",
+          variant: "default",
+        });
+        return;
+      }
+
+      // Show preview in console (in production, this could be a modal)
+      console.group("🔍 Replace Preview");
+      previews.forEach(({ path, old, new: newVal }, i) => {
+        console.log(`${i + 1}. ${path}: "${old}" → "${newVal}"`);
+      });
+      if (previewCount >= MAX_PREVIEWS) {
+        console.log(`... and ${replaceMatchCount - MAX_PREVIEWS} more matches`);
+      }
+      console.groupEnd();
+
+      push({
+        title: "Preview Generated",
+        description: `${previews.length} replacement${previews.length !== 1 ? "s" : ""} previewed (check console)`,
+        variant: "success",
+      });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Preview failed";
+      push({
+        title: "Preview Error",
+        description: message,
+        variant: "error",
+      });
+    }
+  }, [
+    result,
+    replacePattern,
+    replaceModeRegex,
+    replaceFlags,
+    replaceValue,
+    replaceMatchCount,
+    push,
+  ]);
+
+  // Additional keyboard shortcuts for find/replace
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isTyping = tag === "input" || tag === "textarea";
+      if (!(e.metaKey || e.ctrlKey)) return;
+
+      if (e.key.toLowerCase() === "f" && showTree && !isTyping) {
+        // Toggle Find & Replace panel
+        e.preventDefault();
+        setReplacePanelOpen((o) => !o);
+      } else if (
+        e.key.toLowerCase() === "h" &&
+        showTree &&
+        replacePanelOpen &&
+        !isTyping
+      ) {
+        // Replace All (Cmd/Ctrl+H)
+        if (
+          replacePattern.trim() &&
+          !replaceError &&
+          result?.parsed &&
+          replaceMatchCount > 0
+        ) {
+          e.preventDefault();
+          performReplace(false);
+        }
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    showTree,
+    replacePanelOpen,
+    replacePattern,
+    replaceError,
+    result?.parsed,
+    replaceMatchCount,
+    performReplace,
+  ]);
   useEffect(() => {
     if (!showTree || !result?.parsed || !replacePattern.trim()) {
       setReplaceMatchCount(0);
@@ -1180,7 +1511,7 @@ export function JsonTools() {
     );
   }
 
-  // Renderer implementations (currently only static). Virtual placeholder reserved.
+  // Renderer implementations: static recursive and virtualized windowed
   const staticRenderer: JsonTreeRenderer = {
     renderRoot: (value: unknown) => (
       <RenderTreeRoot
@@ -1191,7 +1522,64 @@ export function JsonTools() {
     ),
   };
 
-  const activeRenderer: JsonTreeRenderer = staticRenderer; // swap when virtual renderer added
+  const virtualizedRenderer: JsonTreeRenderer = {
+    renderRoot: (value: unknown) => (
+      <VirtualizedJsonTree
+        data={value}
+        collapsed={collapsed}
+        onToggle={toggle}
+        searchTerm={search}
+        searchMode={searchMode}
+        matchPaths={matchPaths}
+        activeMatchIndex={activeMatchIndex}
+        selectedPath={selectedPath}
+        onSelect={setSelectedPath}
+        sortKeys={sortKeys}
+        depthLimit={depthLimit}
+        perfMode={perfMode}
+        onEdit={(path, val) => {
+          setEditPath(path);
+          setEditValue(val);
+        }}
+        editPath={editPath}
+        editValue={editValue}
+        onEditChange={setEditValue}
+        onEditSave={applyEdit}
+        onEditCancel={() => {
+          setEditPath(null);
+          setEditValue("");
+        }}
+      />
+    ),
+  };
+
+  // Auto-detect when to use virtualization based on dataset size
+  const shouldUseVirtualization = useMemo(() => {
+    if (!result?.parsed) return false;
+
+    // Count total nodes to determine if virtualization is beneficial
+    let nodeCount = 0;
+    const countNodes = (val: unknown) => {
+      nodeCount++;
+      if (nodeCount > 3000) return; // Early exit for performance
+      if (val && typeof val === "object") {
+        if (Array.isArray(val)) {
+          val.forEach(countNodes);
+        } else {
+          Object.values(val as Record<string, unknown>).forEach(countNodes);
+        }
+      }
+    };
+
+    countNodes(result.parsed);
+
+    // Use virtualization for datasets with >3000 nodes or when explicitly enabled
+    return nodeCount > 3000 || useVirtualization;
+  }, [result?.parsed, useVirtualization]);
+
+  const activeRenderer: JsonTreeRenderer = shouldUseVirtualization
+    ? virtualizedRenderer
+    : staticRenderer;
 
   return (
     <div className="space-y-4">
@@ -1339,6 +1727,23 @@ export function JsonTools() {
               >
                 {perfMode ? "Perf On" : "Perf Off"}
               </Button>
+              <Button
+                onClick={() => setUseVirtualization((v) => !v)}
+                size="sm"
+                variant={useVirtualization ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                title="Virtualization improves performance for large datasets by rendering only visible nodes"
+              >
+                {useVirtualization ? "Virtual" : "Static"}
+              </Button>
+              {shouldUseVirtualization && !useVirtualization && (
+                <span
+                  className="text-xs text-amber-600 dark:text-amber-400"
+                  title="Large dataset detected - virtualization recommended"
+                >
+                  Auto-Virtual Recommended
+                </span>
+              )}
             </div>
           ) : null}
           {showTree && (
@@ -1571,25 +1976,40 @@ export function JsonTools() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled
+                disabled={
+                  !replacePattern.trim() || !!replaceError || !result?.parsed
+                }
                 className="h-8 px-3 text-[11px]"
-                title="Preview pending implementation"
+                onClick={previewReplace}
+                title="Preview replacements in console"
               >
                 Preview
               </Button>
               <Button
                 size="sm"
-                disabled
+                disabled={
+                  !replacePattern.trim() ||
+                  !!replaceError ||
+                  !result?.parsed ||
+                  replaceMatchCount === 0
+                }
                 className="h-8 px-3 text-[11px]"
-                title="Replace One (pending)"
+                onClick={() => performReplace(true)}
+                title="Replace the first match only"
               >
                 Replace One
               </Button>
               <Button
                 size="sm"
-                disabled
+                disabled={
+                  !replacePattern.trim() ||
+                  !!replaceError ||
+                  !result?.parsed ||
+                  replaceMatchCount === 0
+                }
                 className="h-8 px-3 text-[11px]"
-                title="Replace All (pending)"
+                onClick={() => performReplace(false)}
+                title="Replace all matches"
               >
                 Replace All
               </Button>
@@ -1601,8 +2021,9 @@ export function JsonTools() {
             </p>
           )}
           <p className="text-[10px] text-muted-foreground">
-            Skeleton only: replacements disabled. Future implementation will
-            batch edits into one undo step and respect perf mode limits.
+            Find & Replace supports both plain text and regex patterns. Use
+            Preview to see changes before applying. All replacements are added
+            as a single undo step for easy rollback.
           </p>
         </div>
       )}

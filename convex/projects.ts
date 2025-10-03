@@ -10,6 +10,144 @@ export const get = query({
   },
 });
 
+// Enhanced query with pagination, filtering, and search
+export const getWithFilters = query({
+  args: {
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
+    language: v.optional(v.string()),
+    searchTerm: v.optional(v.string()),
+    sortBy: v.optional(v.union(v.literal("updated"), v.literal("stars"), v.literal("name"))),
+    sortOrder: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+    excludeForks: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const {
+      limit = 12,
+      offset = 0,
+      language,
+      searchTerm,
+      sortBy = "updated",
+      sortOrder = "desc",
+      excludeForks = true,
+    } = args;
+
+    // Get all projects first
+    let projects = await ctx.db.query("projects").collect();
+
+    // Apply filters
+    if (excludeForks) {
+      projects = projects.filter(p => !p.fork);
+    }
+
+    if (language) {
+      projects = projects.filter(p => 
+        p.language?.toLowerCase() === language.toLowerCase()
+      );
+    }
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      projects = projects.filter(p =>
+        p.name.toLowerCase().includes(term) ||
+        (p.description && p.description.toLowerCase().includes(term)) ||
+        p.topics.some(topic => topic.toLowerCase().includes(term))
+      );
+    }
+
+    // Apply sorting
+    projects.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case "name":
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case "stars":
+          comparison = a.stargazers_count - b.stargazers_count;
+          break;
+        case "updated":
+        default:
+          comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          break;
+      }
+
+      return sortOrder === "desc" ? -comparison : comparison;
+    });
+
+    // Calculate pagination
+    const total = projects.length;
+    const totalPages = Math.ceil(total / limit);
+    const hasMore = offset + limit < total;
+    const paginatedProjects = projects.slice(offset, offset + limit);
+
+    return {
+      projects: paginatedProjects,
+      pagination: {
+        total,
+        totalPages,
+        currentPage: Math.floor(offset / limit) + 1,
+        hasMore,
+        limit,
+        offset,
+      },
+      filters: {
+        language,
+        searchTerm,
+        sortBy,
+        sortOrder,
+        excludeForks,
+      },
+    };
+  },
+});
+
+// Query to get unique languages for filter options
+export const getLanguages = query({
+  args: {},
+  handler: async (ctx) => {
+    const projects = await ctx.db.query("projects").collect();
+    
+    const languages = projects
+      .filter(p => p.language && !p.fork)
+      .map(p => p.language!)
+      .filter((lang, index, arr) => arr.indexOf(lang) === index)
+      .sort();
+
+    return languages;
+  },
+});
+
+// Query to get project statistics
+export const getStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const projects = await ctx.db.query("projects").collect();
+    
+    const nonForkProjects = projects.filter(p => !p.fork);
+    const totalStars = nonForkProjects.reduce((sum, p) => sum + p.stargazers_count, 0);
+    const totalForks = nonForkProjects.reduce((sum, p) => sum + p.forks_count, 0);
+    
+    const languageStats = nonForkProjects.reduce((acc, p) => {
+      if (p.language) {
+        acc[p.language] = (acc[p.language] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      totalProjects: nonForkProjects.length,
+      totalStars,
+      totalForks,
+      languages: Object.keys(languageStats).length,
+      topLanguages: Object.entries(languageStats)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5)
+        .map(([lang, count]) => ({ language: lang, count })),
+    };
+  },
+});
+
 // Query to get featured projects (non-fork, has description, recent activity)
 export const getFeatured = query({
   args: {},

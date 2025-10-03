@@ -1,6 +1,21 @@
-import { Metadata } from "next";
+"use client";
+
+import { useState, useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
-import { ExternalLink, Github, Globe } from "lucide-react";
+import {
+  ExternalLink,
+  Github,
+  Globe,
+  Search,
+  Star,
+  GitFork,
+  Code,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -11,162 +26,97 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/layout/Section";
+import { motion, AnimatePresence } from "framer-motion";
+import { useMotion } from "@/lib/motion/hooks";
 
-export const metadata: Metadata = {
-  title: "Projects",
-  description: "A showcase of hosted projects and web applications.",
-};
-
-interface HostedProject {
-  id: string;
-  title: string;
-  description: string;
-  url: string;
-  githubUrl?: string;
-  image?: string;
-  technologies: string[];
-  status: "live" | "development" | "coming-soon";
-  featured?: boolean;
-}
-
-// Sample project data - replace with actual projects
-const HOSTED_PROJECTS: HostedProject[] = [
-  {
-    id: "personal-website",
-    title: "Personal Portfolio & Toolkit",
-    description:
-      "This very website! A modern personal portfolio with integrated developer tools, built with Next.js 15, Convex, and TypeScript.",
-    url: "https://romiafan.dev",
-    githubUrl: "https://github.com/romiafan/personal-website",
-    technologies: [
-      "Next.js",
-      "TypeScript",
-      "Convex",
-      "Tailwind CSS",
-      "Framer Motion",
-    ],
-    status: "live",
-    featured: true,
-  },
-  {
-    id: "sample-project-1",
-    title: "Sample Web App",
-    description:
-      "A sample project placeholder. Replace this with your actual hosted projects.",
-    url: "https://example.com",
-    githubUrl: "https://github.com/username/repo",
-    technologies: ["React", "Node.js", "PostgreSQL"],
-    status: "development",
-  },
-  {
-    id: "sample-project-2",
-    title: "Another Project",
-    description:
-      "Another sample project. Add your real projects here with actual URLs and descriptions.",
-    url: "https://example2.com",
-    technologies: ["Vue.js", "Express", "MongoDB"],
-    status: "coming-soon",
-  },
-];
-
-function ProjectCard({ project }: { project: HostedProject }) {
-  const getStatusColor = (status: HostedProject["status"]) => {
-    switch (status) {
-      case "live":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "development":
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case "coming-soon":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-    }
-  };
-
-  const getStatusText = (status: HostedProject["status"]) => {
-    switch (status) {
-      case "live":
-        return "Live";
-      case "development":
-        return "In Development";
-      case "coming-soon":
-        return "Coming Soon";
-    }
-  };
-
-  return (
-    <Card className="h-full hover:shadow-lg transition-all duration-300 group">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <CardTitle className="text-xl mb-2 group-hover:text-primary transition-colors">
-              {project.title}
-            </CardTitle>
-            <CardDescription className="text-base leading-relaxed">
-              {project.description}
-            </CardDescription>
-          </div>
-          <Badge
-            variant="outline"
-            className={`ml-4 ${getStatusColor(project.status)}`}
-          >
-            {getStatusText(project.status)}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Tech Stack */}
-        <div className="flex flex-wrap gap-2">
-          {project.technologies.map((tech) => (
-            <Badge key={tech} variant="secondary" className="text-xs">
-              {tech}
-            </Badge>
-          ))}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
-          {project.status === "live" && (
-            <Button asChild size="sm" className="flex-1">
-              <Link
-                href={project.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2"
-              >
-                <Globe className="w-4 h-4" />
-                Visit Site
-                <ExternalLink className="w-3 h-3" />
-              </Link>
-            </Button>
-          )}
-
-          {project.githubUrl && (
-            <Button asChild variant="outline" size="sm">
-              <Link
-                href={project.githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2"
-              >
-                <Github className="w-4 h-4" />
-                Code
-                <ExternalLink className="w-3 h-3" />
-              </Link>
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+interface ProjectFilters {
+  searchTerm: string;
+  language: string;
+  sortBy: "updated" | "stars" | "name";
+  sortOrder: "asc" | "desc";
+  page: number;
 }
 
 export default function ProjectsPage() {
-  const liveProjects = HOSTED_PROJECTS.filter((p) => p.status === "live");
-  const developmentProjects = HOSTED_PROJECTS.filter(
-    (p) => p.status === "development"
-  );
-  const comingSoonProjects = HOSTED_PROJECTS.filter(
-    (p) => p.status === "coming-soon"
-  );
+  const { fadeInUp, staggerContainer } = useMotion();
+
+  const [filters, setFilters] = useState<ProjectFilters>({
+    searchTerm: "",
+    language: "",
+    sortBy: "updated",
+    sortOrder: "desc",
+    page: 1,
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  const limit = 12;
+  const offset = (filters.page - 1) * limit;
+
+  // Convex queries
+  const projectsData = useQuery(api.projects.getWithFilters, {
+    limit,
+    offset,
+    language: filters.language || undefined,
+    searchTerm: filters.searchTerm || undefined,
+    sortBy: filters.sortBy,
+    sortOrder: filters.sortOrder,
+    excludeForks: true,
+  });
+
+  const languages = useQuery(api.projects.getLanguages);
+  const stats = useQuery(api.projects.getStats);
+
+  // Handle filter changes
+  const updateFilters = (newFilters: Partial<ProjectFilters>) => {
+    setIsLoading(true);
+    setFilters((prev) => ({
+      ...prev,
+      ...newFilters,
+      // Reset to page 1 when filters change (except for page changes)
+      page: "page" in newFilters ? newFilters.page! : 1,
+    }));
+
+    // Simulate loading for smooth UX
+    setTimeout(() => setIsLoading(false), 300);
+  };
+
+  // Memoized project cards for performance
+  const projectCards = useMemo(() => {
+    if (!projectsData?.projects) return [];
+
+    return projectsData.projects.map((project) => (
+      <motion.div
+        key={project._id}
+        variants={fadeInUp}
+        layout
+        className="h-full"
+      >
+        <ProjectCard project={project} />
+      </motion.div>
+    ));
+  }, [projectsData?.projects, fadeInUp]);
+
+  if (!projectsData || !languages || !stats) {
+    return (
+      <main className="min-h-screen">
+        <Section className="py-24">
+          <div className="container mx-auto px-4">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-12 bg-muted rounded-lg mx-auto w-64"></div>
+                  <div className="h-6 bg-muted rounded mx-auto w-96"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+      </main>
+    );
+  }
+
+  const { projects, pagination } = projectsData;
 
   return (
     <main className="min-h-screen">
@@ -174,62 +124,214 @@ export default function ProjectsPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-6xl mx-auto">
             {/* Header */}
-            <div className="text-center mb-16">
+            <motion.div
+              variants={fadeInUp}
+              initial="hidden"
+              animate="show"
+              className="text-center mb-16"
+            >
               <h1 className="text-4xl md:text-6xl font-bold mb-6">Projects</h1>
-              <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-                A collection of web applications and projects I&apos;ve built
-                and deployed. Each represents a different exploration in
-                technology and design.
+              <p className="text-xl text-muted-foreground max-w-3xl mx-auto mb-8">
+                Exploring technology through code. A collection of{" "}
+                {stats.totalProjects} open-source projects with{" "}
+                {stats.totalStars} total stars across {stats.languages}{" "}
+                programming languages.
               </p>
-            </div>
 
-            {/* Live Projects */}
-            {liveProjects.length > 0 && (
-              <section className="mb-16">
-                <h2 className="text-2xl font-semibold mb-8 flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  Live Projects
-                </h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {liveProjects.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
-                  ))}
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <div className="text-2xl font-bold">
+                    {stats.totalProjects}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Projects</div>
                 </div>
-              </section>
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <div className="text-2xl font-bold">{stats.totalStars}</div>
+                  <div className="text-sm text-muted-foreground">Stars</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <div className="text-2xl font-bold">{stats.totalForks}</div>
+                  <div className="text-sm text-muted-foreground">Forks</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-muted/50">
+                  <div className="text-2xl font-bold">{stats.languages}</div>
+                  <div className="text-sm text-muted-foreground">Languages</div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Filters */}
+            <motion.div
+              variants={fadeInUp}
+              initial="hidden"
+              animate="show"
+              className="mb-12 space-y-6"
+            >
+              {/* Search */}
+              <div className="relative max-w-md mx-auto">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search projects..."
+                  value={filters.searchTerm}
+                  onChange={(e) =>
+                    updateFilters({ searchTerm: e.target.value })
+                  }
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+              </div>
+
+              {/* Filter Controls */}
+              <div className="flex flex-wrap gap-4 justify-center items-center">
+                {/* Language Filter */}
+                <select
+                  value={filters.language}
+                  onChange={(e) => updateFilters({ language: e.target.value })}
+                  className="px-3 py-2 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">All Languages</option>
+                  {languages.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Sort Controls */}
+                <select
+                  value={filters.sortBy}
+                  onChange={(e) =>
+                    updateFilters({
+                      sortBy: e.target.value as "updated" | "stars" | "name",
+                    })
+                  }
+                  className="px-3 py-2 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary"
+                >
+                  <option value="updated">Recently Updated</option>
+                  <option value="stars">Most Stars</option>
+                  <option value="name">Name</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    updateFilters({
+                      sortOrder: filters.sortOrder === "desc" ? "asc" : "desc",
+                    })
+                  }
+                  className="px-3 py-2 rounded-lg border border-border bg-background hover:bg-muted transition-colors"
+                >
+                  {filters.sortOrder === "desc" ? "↓" : "↑"}
+                </button>
+
+                {/* Clear Filters */}
+                {(filters.searchTerm || filters.language) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateFilters({ searchTerm: "", language: "" })
+                    }
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Projects Grid */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${filters.page}-${filters.language}-${filters.searchTerm}`}
+                variants={staggerContainer}
+                initial="hidden"
+                animate="show"
+                exit="hidden"
+                className={`grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 ${
+                  isLoading ? "opacity-50 pointer-events-none" : ""
+                }`}
+              >
+                {projectCards}
+              </motion.div>
+            </AnimatePresence>
+
+            {/* No Results */}
+            {projects.length === 0 && (
+              <motion.div
+                variants={fadeInUp}
+                initial="hidden"
+                animate="show"
+                className="text-center py-12"
+              >
+                <div className="text-muted-foreground mb-4">
+                  No projects found
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    updateFilters({ searchTerm: "", language: "" })
+                  }
+                >
+                  Clear Filters
+                </Button>
+              </motion.div>
             )}
 
-            {/* In Development */}
-            {developmentProjects.length > 0 && (
-              <section className="mb-16">
-                <h2 className="text-2xl font-semibold mb-8 flex items-center gap-2">
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  In Development
-                </h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {developmentProjects.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <motion.div
+                variants={fadeInUp}
+                initial="hidden"
+                animate="show"
+                className="flex justify-center items-center gap-4 mt-12"
+              >
+                <Button
+                  variant="outline"
+                  disabled={pagination.currentPage <= 1}
+                  onClick={() => updateFilters({ page: filters.page - 1 })}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  Previous
+                </Button>
 
-            {/* Coming Soon */}
-            {comingSoonProjects.length > 0 && (
-              <section className="mb-16">
-                <h2 className="text-2xl font-semibold mb-8 flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  Coming Soon
-                </h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {comingSoonProjects.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
+                <div className="flex items-center gap-2">
+                  {Array.from(
+                    { length: pagination.totalPages },
+                    (_, i) => i + 1
+                  ).map((pageNum) => (
+                    <Button
+                      key={pageNum}
+                      variant={
+                        pageNum === pagination.currentPage
+                          ? "default"
+                          : "outline"
+                      }
+                      size="sm"
+                      onClick={() => updateFilters({ page: pageNum })}
+                    >
+                      {pageNum}
+                    </Button>
                   ))}
                 </div>
-              </section>
+
+                <Button
+                  variant="outline"
+                  disabled={pagination.currentPage >= pagination.totalPages}
+                  onClick={() => updateFilters({ page: filters.page + 1 })}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
+              </motion.div>
             )}
 
             {/* Call to Action */}
-            <div className="text-center mt-16 p-8 rounded-lg bg-muted/50">
+            <motion.div
+              variants={fadeInUp}
+              initial="hidden"
+              animate="show"
+              className="text-center mt-16 p-8 rounded-lg bg-muted/50"
+            >
               <h3 className="text-xl font-semibold mb-4">
                 Interested in Collaboration?
               </h3>
@@ -240,10 +342,121 @@ export default function ProjectsPage() {
               <Button asChild>
                 <Link href="/#contact">Get In Touch</Link>
               </Button>
-            </div>
+            </motion.div>
           </div>
         </div>
       </Section>
     </main>
+  );
+}
+
+interface Project {
+  _id: string;
+  name: string;
+  description?: string;
+  html_url: string;
+  homepage?: string;
+  language?: string;
+  topics: string[];
+  stargazers_count: number;
+  forks_count: number;
+  updated_at: string;
+  created_at: string;
+  private: boolean;
+  fork: boolean;
+}
+
+function ProjectCard({ project }: { project: Project }) {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  return (
+    <Card className="h-full hover:shadow-lg transition-all duration-300 group">
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <CardTitle className="text-xl mb-2 group-hover:text-primary transition-colors">
+              {project.name}
+            </CardTitle>
+            <CardDescription className="text-base leading-relaxed line-clamp-3">
+              {project.description || "No description available"}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Language and Topics */}
+        <div className="flex flex-wrap gap-2">
+          {project.language && (
+            <Badge variant="default" className="text-xs">
+              <Code className="w-3 h-3 mr-1" />
+              {project.language}
+            </Badge>
+          )}
+          {project.topics.slice(0, 2).map((topic: string) => (
+            <Badge key={topic} variant="secondary" className="text-xs">
+              {topic}
+            </Badge>
+          ))}
+          {project.topics.length > 2 && (
+            <Badge variant="outline" className="text-xs">
+              +{project.topics.length - 2}
+            </Badge>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Star className="w-4 h-4" />
+            {project.stargazers_count}
+          </div>
+          <div className="flex items-center gap-1">
+            <GitFork className="w-4 h-4" />
+            {project.forks_count}
+          </div>
+          <div className="flex items-center gap-1">
+            <Calendar className="w-4 h-4" />
+            {formatDate(project.updated_at)}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2 pt-2">
+          <Button asChild size="sm" className="flex-1">
+            <Link
+              href={project.html_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <Github className="w-4 h-4" />
+              View Code
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </Button>
+
+          {project.homepage && (
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={project.homepage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2"
+              >
+                <Globe className="w-4 h-4" />
+                Live Demo
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

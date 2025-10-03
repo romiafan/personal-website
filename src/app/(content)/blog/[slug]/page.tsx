@@ -1,10 +1,10 @@
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { ChevronLeft, Calendar, Tag } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Section } from '@/components/layout/Section';
-import { getPostBySlug, getAllPosts } from '@/lib/posts';
+import { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft, Calendar, Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Section } from "@/components/layout/Section";
+import { getPostBySlug, getAllPosts } from "@/lib/posts";
 
 interface BlogPostPageProps {
   params: {
@@ -19,12 +19,14 @@ export async function generateStaticParams() {
   }));
 }
 
-export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: BlogPostPageProps): Promise<Metadata> {
   const post = await getPostBySlug(params.slug);
-  
+
   if (!post) {
     return {
-      title: 'Post Not Found',
+      title: "Post Not Found",
     };
   }
 
@@ -47,7 +49,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             <div className="mb-8">
-              <Link 
+              <Link
                 href="/blog"
                 className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -61,14 +63,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 <h1 className="text-4xl md:text-5xl font-bold mb-6">
                   {post.title}
                 </h1>
-                
+
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-muted-foreground mb-6">
                   <div className="flex items-center">
                     <Calendar className="w-4 h-4 mr-2" />
-                    {new Date(post.date).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
+                    {new Date(post.date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
                     })}
                   </div>
                 </div>
@@ -85,7 +87,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                     </div>
                   </div>
                 )}
-                
+
                 <p className="text-xl text-muted-foreground mt-6">
                   {post.description}
                 </p>
@@ -93,9 +95,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
               <div className="border-t border-border pt-12">
                 <div className="bg-muted/50 rounded-lg p-8 text-center">
-                  <h2 className="text-2xl font-semibold mb-4">Content Coming Soon</h2>
+                  <h2 className="text-2xl font-semibold mb-4">
+                    Content Coming Soon
+                  </h2>
                   <p className="text-muted-foreground">
-                    This post is in development. The full content will be available soon.
+                    This post is in development. The full content will be
+                    available soon.
                   </p>
                 </div>
               </div>
