@@ -16,7 +16,7 @@ The application syncs your GitHub repositories to display them on your personal 
    - **Name**: `personal-website-sync` (or any descriptive name)
    - **Expiration**: Set according to your preference (90 days recommended)
    - **Resource owner**: Select your personal account
-   - **Repository access**: 
+   - **Repository access**:
      - For public repos only: Select "Public Repositories (read-only)"
      - For all repos: Select "All repositories" and add "Contents" read permission
 
@@ -47,19 +47,23 @@ Replace `your_actual_token_here` with the token you just created.
 ## Troubleshooting
 
 ### "GitHub token not configured" Error
+
 - Ensure you've set the token in Convex: `npx convex env set GITHUB_TOKEN your_token`
 - Verify the token isn't the placeholder value
 
 ### "GitHub authentication failed" Error
+
 - Check that your token hasn't expired
 - Verify the token has the correct permissions
 - Try regenerating the token
 
 ### "Rate limit exceeded" Error
+
 - Wait for the rate limit to reset (usually 1 hour)
 - Authenticated requests have much higher limits than anonymous ones
 
 ### No repositories showing up
+
 - Ensure the token has access to read your repositories
 - Check that repositories are public (private repos are filtered out for public display)
 - Verify your username matches the repository owner
@@ -67,6 +71,7 @@ Replace `your_actual_token_here` with the token you just created.
 ## Rate Limits
 
 With a Personal Access Token:
+
 - **5,000 requests per hour** (vs 60 for unauthenticated)
 - **Primary rate limit**: Uses the authenticated user's quota
 - **Secondary rate limits**: Applies to specific endpoints

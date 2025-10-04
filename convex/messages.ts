@@ -7,7 +7,7 @@ const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const WINDOW_MAX = 5;
 
 // Email notification configuration
-const NOTIFICATION_EMAIL = "roman@romiafan.com"; // Replace with your email
+const NOTIFICATION_EMAIL = "romiafan@gmail.com"; // Replace with your email
 const FROM_EMAIL = "noreply@romiafan.com"; // Replace with your domain email
 
 async function sendEmailNotification(args: {
