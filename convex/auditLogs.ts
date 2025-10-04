@@ -1,5 +1,21 @@
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+
+// Insert an audit log entry
+export const insert = mutation({
+  args: {
+    actor: v.string(),
+    action: v.string(),
+    target: v.optional(v.string()),
+    count: v.optional(v.number()),
+    status: v.string(),
+    message: v.optional(v.string()),
+    created_at: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("auditLogs", args);
+  },
+});
 
 // Paginated fetch of audit logs with optional filters on action and status.
 // Uses the by_action_time index when action filter provided, else full scan (acceptable for low volume; optimize later).

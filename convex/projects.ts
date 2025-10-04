@@ -2,6 +2,25 @@ import { query, mutation, action } from "./_generated/server";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 
+// Define types for GitHub API responses
+type GitHubRepo = {
+  name: string;
+  description: string | null;
+  html_url: string;
+  homepage: string | null;
+  language: string | null;
+  topics: string[];
+  stargazers_count: number;
+  forks_count: number;
+  updated_at: string;
+  created_at: string;
+  private: boolean;
+  fork: boolean;
+  owner: {
+    login: string;
+  } | null;
+};
+
 // Query to get all projects
 export const get = query({
   args: {},
@@ -235,104 +254,137 @@ export const syncFromGitHub = mutation({
 export const syncViaGithub = action({
   args: { username: v.string() },
   handler: async (ctx, { username }): Promise<{ count: number; success?: boolean }> => {
+    // Authentication and authorization checks
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Unauthorized: sign in required');
+    if (!identity) {
+      throw new Error('Unauthorized: sign in required');
+    }
+    
     const ownerId = process.env.NEXT_PUBLIC_OWNER_USER_ID;
-    if (ownerId && identity.subject !== ownerId) throw new Error('Forbidden: not owner');
-
-    const token = process.env.GITHUB_TOKEN; // should be set in .env (non-public)
-    const headers: Record<string,string> = { 'Accept': 'application/vnd.github+json' };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-      headers['X-GitHub-Api-Version'] = '2022-11-28';
-    }
-    // Fetch strategy:
-    // 1. If token present: use authenticated /user/repos to include owner, collaborator, org repos (public + private) then filter.
-    // 2. Else fallback to public only /users/:username/repos.
-    let endpoint: string;
-    if (token) {
-      // affiliation can be owner,collaborator,organization_member; pick owner + member for now to avoid huge lists.
-      endpoint = `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,organization_member`;
-    } else {
-      endpoint = `https://api.github.com/users/${username}/repos?per_page=100&sort=updated`;
+    if (ownerId && identity.subject !== ownerId) {
+      throw new Error('Forbidden: not owner');
     }
 
-    const res = await fetch(endpoint, { headers });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub fetch failed: ${res.status} ${text.slice(0,200)}`);
+    // Get GitHub token from environment
+    const token = process.env.GITHUB_TOKEN;
+    if (!token || token === 'placeholder_token_here') {
+      throw new Error('GitHub token not configured. Please set GITHUB_TOKEN environment variable.');
     }
-    const raw = await res.json();
-    if (!Array.isArray(raw)) throw new Error('Unexpected GitHub response');
 
-    // Normalize (limit to repos owned by the username OR explicitly allow when token path used)
-    const normalized = raw.map((r: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
-      owner: r.owner?.login || undefined,
-      name: r.name,
-      description: r.description ?? undefined,
-      html_url: r.html_url,
-      homepage: r.homepage || undefined,
-      language: r.language || undefined,
-      topics: r.topics || [],
-      stargazers_count: r.stargazers_count ?? 0,
-      forks_count: r.forks_count ?? 0,
-      updated_at: r.updated_at,
-      created_at: r.created_at,
-      private: !!r.private,
-      fork: !!r.fork,
-    }));
+    // Prepare headers for authenticated GitHub API request
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'personal-website/1.0'
+    };
 
-    // Keep only repos actually owned by the specified username (case-insensitive).
-    const owned = normalized.filter(p => (p.owner || '').toLowerCase() === username.toLowerCase());
+    try {
+      // Use authenticated endpoint to get better rate limits and access to more repos
+      const endpoint = `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,organization_member&type=all`;
+      
+      const res = await fetch(endpoint, { headers });
+      
+      // Handle rate limiting
+      if (res.status === 403) {
+        const rateLimitRemaining = res.headers.get('x-ratelimit-remaining');
+        const rateLimitReset = res.headers.get('x-ratelimit-reset');
+        if (rateLimitRemaining === '0') {
+          const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset) * 1000) : 'unknown';
+          throw new Error(`GitHub API rate limit exceeded. Resets at: ${resetTime}`);
+        }
+      }
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`GitHub API error: ${res.status} ${res.statusText}. ${errorText.slice(0, 200)}`);
+      }
 
-    // Exclude private repos from public listing.
-    let projects = owned.filter(p => !p.private).map(p => ({
-      name: p.name,
-      description: p.description,
-      html_url: p.html_url,
-      homepage: p.homepage,
-      language: p.language,
-      topics: p.topics,
-      stargazers_count: p.stargazers_count,
-      forks_count: p.forks_count,
-      updated_at: p.updated_at,
-      created_at: p.created_at,
-      private: p.private,
-      fork: p.fork,
-    }));
+      const repos = await res.json();
+      if (!Array.isArray(repos)) {
+        throw new Error('Unexpected GitHub API response format');
+      }
 
-    // Fallback: if suspiciously low count (<=1) but raw normalized has more public repos, include those
-    if (projects.length <= 1) {
-      const publicNonPrivate = normalized.filter(p => !p.private).map(p => ({
-        name: p.name,
-        description: p.description,
-        html_url: p.html_url,
-        homepage: p.homepage,
-        language: p.language,
-        topics: p.topics,
-        stargazers_count: p.stargazers_count,
-        forks_count: p.forks_count,
-        updated_at: p.updated_at,
-        created_at: p.created_at,
-        private: p.private,
-        fork: p.fork,
-      }));
-      if (publicNonPrivate.length > projects.length) {
-        projects = publicNonPrivate;
+      // Filter and normalize repository data
+      const normalizedRepos = (repos as GitHubRepo[])
+        .filter((repo: GitHubRepo) => {
+          // Only include repos owned by the specified username (case-insensitive)
+          return repo.owner?.login?.toLowerCase() === username.toLowerCase() && 
+                 !repo.private; // Exclude private repos from public display
+        })
+        .map((repo: GitHubRepo) => ({
+          name: repo.name,
+          description: repo.description ?? undefined,
+          html_url: repo.html_url,
+          homepage: repo.homepage || undefined,
+          language: repo.language || undefined,
+          topics: repo.topics || [],
+          stargazers_count: repo.stargazers_count ?? 0,
+          forks_count: repo.forks_count ?? 0,
+          updated_at: repo.updated_at,
+          created_at: repo.created_at,
+          private: false, // We already filtered out private repos
+          fork: !!repo.fork,
+        }));
+
+      // Safety validations
+      if (normalizedRepos.length > 300) {
+        throw new Error('Too many repositories returned (limit 300)');
+      }
+
+      // Check for suspicious low count that might indicate API issues
+      const existing = await ctx.runQuery(api.projects.get);
+      if (existing.length > 5 && normalizedRepos.length <= 1) {
+        throw new Error(
+          `Aborting sync: suspicious low repo count (existing ${existing.length} -> new ${normalizedRepos.length}). This might indicate an API issue.`
+        );
+      }
+
+      // Perform the sync using the existing mutation
+      const result = await ctx.runMutation(api.projects.syncFromGitHub, { 
+        username, 
+        projects: normalizedRepos 
+      });
+
+      // Log successful sync
+      console.log(`GitHub sync successful: ${normalizedRepos.length} repositories synced for ${username}`);
+      
+      return { 
+        count: result.count, 
+        success: true 
+      };
+
+    } catch (error) {
+      // Enhanced error logging
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error(`GitHub sync failed for ${username}:`, errorMessage);
+      
+      // Log failed sync attempt
+      try {
+        await ctx.runMutation(api.auditLogs.insert, {
+          actor: identity.subject,
+          action: 'github.sync',
+          target: username,
+          count: 0,
+          status: 'error',
+          message: errorMessage,
+          created_at: new Date().toISOString(),
+        });
+      } catch (logError) {
+        console.error('Failed to log sync error:', logError);
+      }
+      
+      // Re-throw with user-friendly message
+      if (errorMessage.includes('rate limit')) {
+        throw new Error('GitHub API rate limit exceeded. Please try again later.');
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        throw new Error('GitHub authentication failed. Please check the API token configuration.');
+      } else if (errorMessage.includes('404')) {
+        throw new Error(`GitHub user "${username}" not found or repositories are not accessible.`);
+      } else {
+        throw new Error(`Sync failed: ${errorMessage}`);
       }
     }
-
-    if (projects.length > 300) throw new Error('Too many repositories returned (limit 300)');
-
-    // Safety guard against accidental truncation: if existing > 5 and new <= 1, abort.
-  // Actions cannot access db directly; use runQuery.
-  const existing = await ctx.runQuery(api.projects.get);
-    if (existing.length > 5 && projects.length <= 1) {
-      throw new Error(`Aborting sync: suspicious low repo count (existing ${existing.length} -> new ${projects.length}).`);
-    }
-
-    const result = await ctx.runMutation(api.projects.syncFromGitHub, { username, projects });
-    return result as { count: number; success?: boolean };
   }
 });
 
