@@ -1,0 +1,145 @@
+---
+title: "Building a Modern Personal Website with Next.js 15"
+description: "A deep dive into creating a full-stack personal website using Next.js 15, TypeScript, Convex, and modern development practices."
+date: "2025-10-04"
+tags: ["nextjs", "typescript", "convex", "web-development"]
+published: true
+---
+
+# Building a Modern Personal Website with Next.js 15
+
+Creating a personal website in 2025 means leveraging the latest technologies to build something that's not just functional, but also performant, accessible, and maintainable. In this post, I'll walk you through the journey of building a modern personal website using Next.js 15 and a carefully selected tech stack.
+
+## The Technology Stack
+
+After evaluating various options, I settled on a stack that prioritizes developer experience and performance:
+
+### Core Framework
+
+- **Next.js 15** with App Router
+- **TypeScript** for type safety
+- **Tailwind CSS v4** for styling
+- **shadcn/ui** for component library
+
+### Backend & Database
+
+- **Convex** for real-time database and API
+- **Clerk** for authentication
+- **Resend** for email notifications
+
+### Developer Experience
+
+- **Turbopack** for fast development builds
+- **Vitest** for testing
+- **ESLint** and **Prettier** for code quality
+
+## Key Features Implemented
+
+### 1. Dynamic Project Showcase
+
+The website automatically syncs with GitHub to showcase my latest projects. This includes:
+
+```typescript
+// Convex function to sync GitHub repositories
+export const syncViaGithub = action({
+  args: { username: v.string() },
+  handler: async (ctx, { username }) => {
+    const response = await fetch(
+      `https://api.github.com/users/${username}/repos`
+    );
+    const repos = await response.json();
+
+    // Store in Convex database
+    for (const repo of repos) {
+      await ctx.runMutation(api.projects.upsert, {
+        name: repo.name,
+        description: repo.description,
+        // ... more fields
+      });
+    }
+  },
+});
+```
+
+### 2. Professional Toolkit
+
+I built a collection of developer tools including:
+
+- JSON formatter and validator
+- JWT decoder
+- UUID generator
+- Timestamp converter
+- And many more...
+
+### 3. Performance Optimizations
+
+The site achieves excellent Lighthouse scores through:
+
+- Image optimization with Next.js Image component
+- Bundle splitting and code optimization
+- Font optimization with Geist fonts
+- Core Web Vitals monitoring
+
+## Architecture Decisions
+
+### Why Next.js 15?
+
+Next.js 15 brought several improvements that made it an obvious choice:
+
+- **Turbopack** for faster development builds
+- Improved **App Router** with better performance
+- Enhanced **Server Components** support
+- Better **TypeScript** integration
+
+### Why Convex?
+
+Traditional databases often require complex setup and management. Convex provides:
+
+- Real-time updates out of the box
+- TypeScript-first API
+- Built-in authentication integration
+- Serverless scaling
+
+## Development Workflow
+
+The development process follows modern best practices:
+
+1. **Feature Development** in isolated branches
+2. **Type-safe APIs** with Convex schema validation
+3. **Component Testing** with Vitest and React Testing Library
+4. **Performance Monitoring** with built-in analytics
+
+## Lessons Learned
+
+Building this website taught me several valuable lessons:
+
+### 1. Start Simple, Scale Gradually
+
+I began with a basic structure and added features incrementally. This approach prevented overwhelming complexity early on.
+
+### 2. Invest in Developer Experience
+
+Setting up proper TypeScript, linting, and testing infrastructure upfront paid dividends throughout development.
+
+### 3. Performance is a Feature
+
+Users expect fast websites. Optimizing for Core Web Vitals from the beginning is easier than retrofitting performance later.
+
+## What's Next?
+
+The website is now feature-complete, but there's always room for improvement:
+
+- Adding more interactive components
+- Expanding the blog with technical content
+- Implementing advanced analytics
+- Exploring new Web APIs
+
+## Conclusion
+
+Building a modern personal website is an excellent way to showcase your skills while learning new technologies. The key is choosing tools that enhance rather than complicate your development workflow.
+
+The complete source code for this website is available on [GitHub](https://github.com/romiafan/personal-website), and you can see it live at [romiafan.dev](https://romiafan.dev).
+
+---
+
+_What technologies are you using for your personal website? I'd love to hear about your approach in the comments below._

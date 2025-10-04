@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { Clock } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -61,12 +62,20 @@ export default async function BlogPage() {
                             {post.description}
                           </CardDescription>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          {new Date(post.date).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div>
+                            {new Date(post.date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </div>
+                          {post.readingTime && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {post.readingTime}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </CardHeader>

@@ -4,10 +4,6 @@ import withBundleAnalyzer from '@next/bundle-analyzer';
 
 const withMDX = createMDX({
   extension: /\.mdx?$/,
-  options: {
-    remarkPlugins: [],
-    rehypePlugins: [],
-  },
 });
 
 const nextConfig: NextConfig = {

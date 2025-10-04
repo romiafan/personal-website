@@ -1,10 +1,11 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Calendar, Tag } from "lucide-react";
+import { ChevronLeft, Calendar, Tag, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Section } from "@/components/layout/Section";
 import { getPostBySlug, getAllPosts } from "@/lib/posts";
+import { MDXProvider } from "./mdx-provider";
 
 interface BlogPostPageProps {
   params: {
@@ -33,6 +34,18 @@ export async function generateMetadata({
   return {
     title: post.title,
     description: post.description,
+    openGraph: {
+      title: post.title,
+      description: post.description,
+      type: "article",
+      publishedTime: post.date,
+      tags: post.tags,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.description,
+    },
   };
 }
 
@@ -58,7 +71,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </Link>
             </div>
 
-            <article className="prose prose-lg dark:prose-invert max-w-none">
+            <article>
               <header className="mb-12">
                 <h1 className="text-4xl md:text-5xl font-bold mb-6">
                   {post.title}
@@ -73,10 +86,16 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                       day: "numeric",
                     })}
                   </div>
+                  {post.readingTime && (
+                    <div className="flex items-center">
+                      <Clock className="w-4 h-4 mr-2" />
+                      {post.readingTime}
+                    </div>
+                  )}
                 </div>
 
                 {post.tags && post.tags.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mb-6">
                     <Tag className="w-4 h-4 text-muted-foreground" />
                     <div className="flex flex-wrap gap-2">
                       {post.tags.map((tag) => (
@@ -88,20 +107,16 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                   </div>
                 )}
 
-                <p className="text-xl text-muted-foreground mt-6">
-                  {post.description}
-                </p>
+                {post.description && (
+                  <p className="text-xl text-muted-foreground">
+                    {post.description}
+                  </p>
+                )}
               </header>
 
               <div className="border-t border-border pt-12">
-                <div className="bg-muted/50 rounded-lg p-8 text-center">
-                  <h2 className="text-2xl font-semibold mb-4">
-                    Content Coming Soon
-                  </h2>
-                  <p className="text-muted-foreground">
-                    This post is in development. The full content will be
-                    available soon.
-                  </p>
+                <div className="prose prose-lg dark:prose-invert max-w-none">
+                  <MDXProvider content={post.content || ""} />
                 </div>
               </div>
             </article>
